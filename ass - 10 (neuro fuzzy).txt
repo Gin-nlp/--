@@ -1,0 +1,242 @@
+# -*- coding: utf-8 -*-
+"""Neuro-Fuzzy System Example"""
+
+#!pip install scikit-fuzzy # Uncomment and run this line if you don't have scikit-fuzzy installed
+
+import numpy as np
+import random # Although random is imported, np.random is primarily used
+import matplotlib.pyplot as plt # Imported but not explicitly used in the provided snippets
+
+import skfuzzy as fuzz
+from skfuzzy import control as ctrl
+
+import tensorflow as tf
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense
+from sklearn.preprocessing import LabelEncoder
+from sklearn.model_selection import train_test_split
+
+# --- Step 1: Fuzzy Logic Setup ---
+# Define Fuzzy Antecedent (Input) Variables and their Universes of Discourse
+
+# Speed: Range from 0 to 150 (e.g., km/h or mph)
+speed = ctrl.Antecedent(np.arange(0, 151, 1), 'speed')
+
+# Weather: Categorical or scaled numerical input (e.g., 0=clear, 1=rainy, 2=foggy)
+# Using a universe from 0 to 3 for simplicity based on the data generation approach
+weather = ctrl.Antecedent(np.arange(0, 3, 1), 'weather')
+
+# Define Membership Functions for each Antecedent Variable
+# Membership functions define how crisp input values map to fuzzy sets (e.g., 'slow', 'medium').
+
+# Membership functions for speed
+speed['slow'] = fuzz.trimf(speed.universe, [0, 0, 60])      # Triangular membership function
+speed['medium'] = fuzz.trimf(speed.universe, [40, 80, 120]) # Triangular
+speed['fast'] = fuzz.trimf(speed.universe, [100, 150, 150]) # Triangular
+
+# Membership functions for weather
+# These define the degree to which a weather value corresponds to 'clear', 'rainy', or 'foggy'.
+# Note: The universe is 0-3, but data is generated as 0, 1, 2.
+# The triangular functions map these crisp values to membership degrees.
+weather['clear'] = fuzz.trimf(weather.universe, [0, 0, 0.5])   # Peak at 0 (clear)
+weather['rainy'] = fuzz.trimf(weather.universe, [0.5, 1, 1.5]) # Peak at 1 (rainy)
+weather['foggy'] = fuzz.trimf(weather.universe, [1.5, 2, 2]) # Peak at 2 (foggy)
+
+# Function to fuzzify crisp inputs into membership degrees
+def fuzzify_inputs(speed_val, weather_val):
+    """
+    Takes crisp speed and weather values and returns a list of their
+    membership degrees for each fuzzy set. These serve as fuzzy features.
+    """
+    # Calculate membership degrees for speed fuzzy sets
+    speed_lvls = [
+        fuzz.interp_membership(speed.universe, speed['slow'].mf, speed_val),
+        fuzz.interp_membership(speed.universe, speed['medium'].mf, speed_val),
+        fuzz.interp_membership(speed.universe, speed['fast'].mf, speed_val)
+    ]
+
+    # Calculate membership degrees for weather fuzzy sets
+    weather_lvls = [
+        fuzz.interp_membership(weather.universe, weather['clear'].mf, weather_val),
+        fuzz.interp_membership(weather.universe, weather['rainy'].mf, weather_val),
+        fuzz.interp_membership(weather.universe, weather['foggy'].mf, weather_val)
+    ]
+
+    # Concatenate the membership degrees from both inputs
+    # This forms a single feature vector (fuzzy features) for the neural network
+    return speed_lvls + weather_lvls
+
+# --- Step 2: Generate Synthetic Dataset ---
+# Create a dataset to train the neural network.
+# The inputs are speed and weather. The output (label) is 'Low', 'Medium', or 'High' risk,
+# determined by a simple rule-based system acting as the ground truth.
+
+np.random.seed(0) # Seed for reproducibility
+X_raw = [] # To store the fuzzy features (inputs for NN)
+y_raw = [] # To store the crisp risk labels (outputs for NN training)
+
+for _ in range(1000): # Generate 1000 data samples
+    # Generate random crisp inputs for speed and weather
+    spd = np.random.uniform(0, 150) # Random speed between 0 and 150
+    wthr = np.random.choice([0, 1, 2]) # Random weather: 0 (clear), 1 (rainy), or 2 (foggy)
+
+    # Fuzzify the crisp inputs to get the fuzzy features
+    fuzzy_features = fuzzify_inputs(spd, wthr)
+    X_raw.append(fuzzy_features) # Add fuzzy features to input list
+
+    # Rule-based label generation (Simulating a simplified expert system or ground truth)
+    # This defines what the neural network should learn to predict.
+    if spd > 100 and wthr > 0: # If speed is high AND weather is not clear (rainy or foggy)
+        y_raw.append('High')
+    elif spd > 50: # If speed is moderate to high (and not already classified as High)
+        y_raw.append('Medium')
+    else: # Otherwise (speed is low or moderate in clear weather)
+        y_raw.append('Low')
+
+# Encode labels: Convert the string labels ('Low', 'Medium', 'High') into numerical format
+# that the neural network can understand (e.g., 0, 1, 2).
+label_encoder = LabelEncoder()
+y_encoded = label_encoder.fit_transform(y_raw) # Fit and transform the raw labels
+
+# Convert lists to NumPy arrays for use with TensorFlow/Keras and scikit-learn
+X = np.array(X_raw) # Features for the neural network
+y = np.array(y_encoded) # Numerical labels for the neural network
+
+# --- Step 3: Train Neural Network ---
+# Use the generated dataset (fuzzy features X and encoded labels y) to train a simple
+# feedforward neural network. The network learns the mapping from fuzzy input states
+# to risk categories based on the synthetic ground truth rules.
+
+# Split the dataset into training and testing sets
+# train_test_split shuffles the data and splits it into 80% for training and 20% for testing
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# Define the Neural Network Model (Sequential API)
+# This is a simple feedforward network (Multi-Layer Perceptron - MLP).
+model = Sequential([
+    # Input layer and first hidden layer:
+    # input_dim=6 because fuzzify_inputs returns a list of 6 values (3 for speed, 3 for weather).
+    # Dense is a fully connected layer. 12 is the number of neurons in this layer.
+    # 'relu' (Rectified Linear Unit) is a common activation function.
+    Dense(12, input_dim=6, activation='relu'),
+
+    # Second hidden layer: 8 neurons with 'relu' activation.
+    Dense(8, activation='relu'),
+
+    # Output layer:
+    # 3 neurons, corresponding to the 3 risk classes ('Low', 'Medium', 'High').
+    # 'softmax' activation outputs a probability distribution over the classes,
+    # summing to 1. The class with the highest probability is the predicted class.
+    Dense(3, activation='softmax') # 3 classes: Low, Medium, High
+])
+
+# Compile the Model: Configure the model for training
+# loss='sparse_categorical_crossentropy': Suitable for multi-class classification with integer labels.
+# optimizer='adam': A popular and effective optimization algorithm.
+# metrics=['accuracy']: Monitor the accuracy during training.
+model.compile(loss='sparse_categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+
+# Train the Model: Fit the model to the training data
+# epochs=50: The number of times the entire training dataset is passed forward and backward through the network.
+# batch_size=16: The number of samples per gradient update.
+# verbose=1: Display training progress.
+history = model.fit(X_train, y_train, epochs=50, batch_size=16, verbose=1)
+
+print("\nNeural Network Training Finished.")
+
+# --- Step 4: Evaluate Neural Network ---
+# Assess the performance of the trained network on the unseen test data.
+print("\nEvaluating the trained Neural Network on the test set...")
+loss, accuracy = model.evaluate(X_test, y_test, verbose=0) # verbose=0 hides progress bar
+
+# Print the evaluation result
+print(f"Test Accuracy: {accuracy:.4f}")
+
+# --- Example Prediction using the combined system ---
+# This function demonstrates how a real-world input (crisp speed and weather)
+# goes through the fuzzy logic part (fuzzification) and then the neural network
+# for final classification.
+def predict_risk(speed_input, weather_input):
+    """
+    Predicts the risk level for given crisp speed and weather inputs
+    using the combined Fuzzy Logic and Neural Network system.
+    """
+    # 1. Fuzzify the crisp inputs to get fuzzy features
+    fuzzy_input = np.array(fuzzify_inputs(speed_input, weather_input)).reshape(1, -1)
+    # .reshape(1, -1) ensures the input is in the correct shape (1 sample, 6 features)
+    # expected by the neural network.
+
+    # 2. Feed the fuzzy features into the trained Neural Network for prediction
+    prediction = model.predict(fuzzy_input)
+
+    # 3. Get the predicted class index (the one with the highest probability)
+    predicted_class_index = np.argmax(prediction)
+
+    # 4. Convert the predicted class index back to the original string label
+    predicted_label = label_encoder.inverse_transform([predicted_class_index])[0]
+
+    return predicted_label
+
+# --- Try predicting with example inputs ---
+print("\nTesting the combined system with example inputs:")
+# Example 1: Fast speed (120) and Rainy weather (1)
+predicted_risk_1 = predict_risk(120, 1)
+print(f"Predicted Risk for Speed=120, Weather=1 (Rainy): {predicted_risk_1}") # Expected: High
+
+# Example 2: Slow speed (30) and Clear weather (0)
+predicted_risk_2 = predict_risk(30, 0)
+print(f"Predicted Risk for Speed=30, Weather=0 (Clear): {predicted_risk_2}") # Expected: Low
+
+# Example 3: Moderate speed (70) and Foggy weather (2)
+predicted_risk_3 = predict_risk(70, 2)
+print(f"Predicted Risk for Speed=70, Weather=2 (Foggy): {predicted_risk_3}") # Expected: Medium or High depending on exact position in fuzzy sets
+
+
+
+--------------------------------------------------------------------------------------------------------------
+
+This program creates a simple "Neuro-Fuzzy" system by connecting a Fuzzy Logic preprocessing step to a Neural Network classifier. Here's how it works:
+
+Fuzzy Logic Setup (skfuzzy):
+
+We define Antecedent variables (speed and weather) representing the input dimensions. The universe for each variable is the range of possible crisp input values (e.g., speed from 0 to 150).
+For each input variable, we define Membership Functions (MFs). These MFs (here, triangular using fuzz.trimf) graphically represent fuzzy sets like 'slow', 'medium', 'fast' for speed, and 'clear', 'rainy', 'foggy' for weather. A crisp input value (like speed = 70) will have a degree of membership (a value between 0 and 1) in each of these fuzzy sets (e.g., slightly in 'slow', highly in 'medium', slightly in 'fast').
+The fuzzify_inputs function takes crisp speed_val and weather_val. It uses fuzz.interp_membership to calculate the degree to which these values belong to each defined fuzzy set for speed and weather. It returns a list containing all these membership degrees (e.g., [degree_slow, degree_medium, degree_fast, degree_clear, degree_rainy, degree_foggy]). This list of membership degrees is the output of the fuzzy logic step and serves as the fuzzy features for the neural network.
+Generate Synthetic Dataset (numpy, random, rule-based logic):
+
+Since we don't have real-world labeled data, we create a synthetic dataset.
+We generate random pairs of crisp speed and weather values.
+For each pair of inputs, we use the fuzzify_inputs function to get the 6 fuzzy features. These form the X (input features) for the neural network.
+We then apply a simple, predefined rule-based logic to assign a crisp "risk" label ('Low', 'Medium', or 'High') to these inputs. This rule-based logic acts as our simplified "expert" knowledge or the ground truth labels (y) that the neural network will try to learn. For example, the rule if spd > 100 and wthr > 0: y_raw.append('High') represents a simple expert rule: high speed in non-clear weather is high risk.
+LabelEncoder is used to convert the string labels ('Low', 'Medium', 'High') into numerical format (e.g., 0, 1, 2) because neural networks work with numbers.
+The data is converted to NumPy arrays and split into training and testing sets using train_test_split.
+Train Neural Network (tensorflow.keras):
+
+A Sequential model is created. This is a simple stack of layers.
+Dense layers are fully connected layers, where every neuron in a layer is connected to every neuron in the previous layer.
+The input layer is implicitly defined by the input_dim=6 parameter in the first Dense layer, matching the 6 fuzzy features output by fuzzify_inputs.
+The network has two hidden layers with 12 and 8 neurons, both using the 'relu' activation function, which is standard for hidden layers.
+The output layer has 3 neurons, one for each risk class. The 'softmax' activation function outputs a probability distribution over these 3 classes. The class with the highest probability is the network's prediction.
+The model is compiled with:
+loss='sparse_categorical_crossentropy': An appropriate loss function for multi-class classification when labels are integers.
+optimizer='adam': An efficient algorithm to update the network's weights during training.
+metrics=['accuracy']: To monitor the percentage of correctly classified samples.
+model.fit() trains the network using the training data (X_train, y_train) for a specified number of epochs.
+Evaluate and Predict:
+
+model.evaluate() assesses the performance of the trained network on the unseen test data (X_test, y_test), providing the loss and accuracy. A high accuracy indicates the network has successfully learned the relationship between the fuzzy features and the risk levels defined by the rule-based system.
+The predict_risk function demonstrates the combined system's usage:
+It takes crisp inputs (speed_input, weather_input).
+It first passes these crisp inputs through the fuzzify_inputs function to get the 6 fuzzy features.
+These fuzzy features are then fed into the trained model.predict(). The neural network processes these features and outputs probabilities for each risk class.
+np.argmax() finds the index of the class with the highest probability.
+label_encoder.inverse_transform() converts the numerical class index back into the original string label ('Low', 'Medium', or 'High').
+The predicted risk label is returned.
+The final print statements show examples of using the predict_risk function with specific crisp speed and weather values, and the output shows the predicted risk level based on the combined system's learning.
+How this Combines Fuzzy Logic and Neural Networks:
+
+This is a sequential hybrid or functional hybrid approach:
+
+Fuzzy Logic as Feature Extractor: The Fuzzy Logic part (defining variables and membership functions, and the fuzzify_inputs function) acts as a feature extractor. It takes raw, crisp inputs and transforms them into a set of structured "fuzzy features" (the membership degrees). These features represent the input state in terms of fuzzy concepts (e.g., "how slow is the speed?", "how rainy is the weather?"). This helps the system handle the inherent vagueness or uncertainty in real-world inputs.
+Neural Network as Learner/Classifier: The Neural Network takes these fuzzy features as its input. It then learns the complex, potentially non-linear mapping from these fuzzy input states to the desired output (the risk category), based on the training data (which, in this case, is generated by a rule-based system, but could come from expert labels or real-world data).
+This combination leverages the strengths of both techniques: Fuzzy Logic provides a way to represent and handle uncertainty and human-like linguistic terms, while Neural Networks provide powerful learning capabilities to identify complex patterns and relationships in the data. The fuzzy logic step can sometimes make the learning task easier for the neural network by providing a more meaningful and processed representation of the input.

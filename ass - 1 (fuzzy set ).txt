@@ -1,0 +1,255 @@
+!pip install scikit-fuzzy
+import sys
+
+
+!{sys.executable} -m pip install scikit-fuzzy
+
+
+import numpy as np
+import skfuzzy as fuzz
+from skfuzzy import control as ctrl
+
+
+def define_fuzzy_variables():
+    """
+    Define the fuzzy variables (inputs and output) and their membership functions.
+    """
+    # Input: Soil Moisture (0-100%)
+    soil_moisture = ctrl.Antecedent(np.arange(0, 101, 1), 'soil_moisture')
+    soil_moisture['Dry'] = fuzz.trapmf(soil_moisture.universe, [0, 0, 20, 40])
+    soil_moisture['Moist'] = fuzz.trimf(soil_moisture.universe, [30, 50, 70])
+    soil_moisture['Wet'] = fuzz.trapmf(soil_moisture.universe, [60, 80, 100, 100])
+
+    # Input: Temperature (0-50°C)
+    temperature = ctrl.Antecedent(np.arange(0, 51, 1), 'temperature')
+    temperature['Low'] = fuzz.trapmf(temperature.universe, [0, 0, 10, 20])
+    temperature['Medium'] = fuzz.trimf(temperature.universe, [15, 25, 35])
+    temperature['High'] = fuzz.trapmf(temperature.universe, [30, 40, 50, 50])
+
+    # Output: Water Flow (0-100%)
+    water_flow = ctrl.Consequent(np.arange(0, 101, 1), 'water_flow')
+    water_flow['Low'] = fuzz.trapmf(water_flow.universe, [0, 0, 20, 40])
+    water_flow['Medium'] = fuzz.trimf(water_flow.universe, [30, 50, 70])
+    water_flow['High'] = fuzz.trapmf(water_flow.universe, [60, 80, 100, 100])
+
+    return soil_moisture, temperature, water_flow
+
+
+
+def define_fuzzy_rules(soil_moisture, temperature, water_flow):
+    """
+    Define the fuzzy rules for the system.
+    """
+    rules = [
+        ctrl.Rule(soil_moisture['Dry'] & temperature['High'], water_flow['High']),
+        ctrl.Rule(soil_moisture['Dry'] & temperature['Medium'], water_flow['Medium']),
+        ctrl.Rule(soil_moisture['Dry'] & temperature['Low'], water_flow['Medium']),
+        ctrl.Rule(soil_moisture['Moist'] & temperature['High'], water_flow['Medium']),
+        ctrl.Rule(soil_moisture['Moist'] & temperature['Medium'], water_flow['Low']),
+        ctrl.Rule(soil_moisture['Moist'] & temperature['Low'], water_flow['Low']),
+        ctrl.Rule(soil_moisture['Wet'] & temperature['High'], water_flow['Low']),
+        ctrl.Rule(soil_moisture['Wet'] & temperature['Medium'], water_flow['Low']),
+        ctrl.Rule(soil_moisture['Wet'] & temperature['Low'], water_flow['Low']),
+    ]
+    return rules
+
+
+
+
+def create_fuzzy_system(rules):
+    """
+    Create and return the fuzzy control system and simulation object.
+    """
+    irrigation_ctrl = ctrl.ControlSystem(rules)
+    return ctrl.ControlSystemSimulation(irrigation_ctrl)
+
+
+
+
+
+def main():
+    # Define fuzzy variables
+    soil_moisture, temperature, water_flow = define_fuzzy_variables()
+
+    # Define fuzzy rules
+    rules = define_fuzzy_rules(soil_moisture, temperature, water_flow)
+
+    # Create fuzzy system simulation
+    irrigation_sim = create_fuzzy_system(rules)
+
+    # Get user input
+    try:
+        soil_moisture_input = float(input("Enter the soil moisture level (0-100%): "))
+        temperature_input = float(input("Enter the temperature (°C) (0-50): "))
+
+        # Validate inputs
+        if not (0 <= soil_moisture_input <= 100):
+            raise ValueError("Soil moisture must be between 0 and 100.")
+        if not (0 <= temperature_input <= 50):
+            raise ValueError("Temperature must be between 0 and 50.")
+
+        # Set inputs
+        irrigation_sim.input['soil_moisture'] = soil_moisture_input
+        irrigation_sim.input['temperature'] = temperature_input
+
+        # Compute output
+        irrigation_sim.compute()
+
+        # Display results
+        print(f"\nSoil Moisture Input: {soil_moisture_input}%")
+        print(f"Temperature Input: {temperature_input}°C")
+        print(f"Recommended Water Flow: {irrigation_sim.output['water_flow']:.2f}%")
+
+    except ValueError as e:
+        print(f"Error: {e}")
+
+
+if __name__ == "__main__":
+    main()
+    
+
+--------------------------------------------------------------------------------------------------------------
+
+import numpy as np: Imports the NumPy library, which is essential for numerical operations, especially for creating the universe of discourse (ranges) for fuzzy variables.
+import skfuzzy as fuzz: Imports the main skfuzzy library, usually aliased as fuzz. This provides functions for defining membership functions (like trimf, trapmf).
+from skfuzzy import control as ctrl: Imports the control module from skfuzzy, aliased as ctrl. This module is used to build the fuzzy control system itself, defining antecedents, consequents, rules, and the control system simulation.
+2. define_fuzzy_variables() function:
+
+Python
+
+def define_fuzzy_variables():
+    """
+    Define the fuzzy variables (inputs and output) and their membership functions.
+    """
+    # Input: Soil Moisture (0-100%)
+    soil_moisture = ctrl.Antecedent(np.arange(0, 101, 1), 'soil_moisture')
+    soil_moisture['Dry'] = fuzz.trapmf(soil_moisture.universe, [0, 0, 20, 40])
+    soil_moisture['Moist'] = fuzz.trimf(soil_moisture.universe, [30, 50, 70])
+    soil_moisture['Wet'] = fuzz.trapmf(soil_moisture.universe, [60, 80, 100, 100])
+
+    # Input: Temperature (0-50°C)
+    temperature = ctrl.Antecedent(np.arange(0, 51, 1), 'temperature')
+    temperature['Low'] = fuzz.trapmf(temperature.universe, [0, 0, 10, 20])
+    temperature['Medium'] = fuzz.trimf(temperature.universe, [15, 25, 35])
+    temperature['High'] = fuzz.trapmf(temperature.universe, [30, 40, 50, 50])
+
+    # Output: Water Flow (0-100%)
+    water_flow = ctrl.Consequent(np.arange(0, 101, 1), 'water_flow')
+    water_flow['Low'] = fuzz.trapmf(water_flow.universe, [0, 0, 20, 40])
+    water_flow['Medium'] = fuzz.trimf(water_flow.universe, [30, 50, 70])
+    water_flow['High'] = fuzz.trapmf(water_flow.universe, [60, 80, 100, 100])
+
+    return soil_moisture, temperature, water_flow
+Purpose: This function defines the input and output variables of the fuzzy system and their corresponding fuzzy sets (linguistic terms like 'Dry', 'Low', 'High') along with their membership functions.
+ctrl.Antecedent(...): Creates an input variable (antecedent).
+np.arange(0, 101, 1): Defines the universe of discourse for the variable. For soil_moisture and water_flow, it's the range of values from 0 to 100 (inclusive), incrementing by 1. For temperature, it's 0 to 50.
+'soil_moisture': Assigns a name to the variable.
+ctrl.Consequent(...): Creates an output variable (consequent). Works similarly to Antecedent.
+Membership Functions (.universe, fuzz.trapmf, fuzz.trimf):
+.universe: Refers to the universe of discourse defined when creating the variable.
+variable['FuzzyTerm'] = ...: Assigns a fuzzy set (linguistic term) to the variable.
+fuzz.trapmf(universe, [a, b, c, d]): Defines a trapezoidal membership function. The points a and b are the base of the left side (membership is 0 up to a, rises from a to b). Points b and c define the top of the trapezoid (membership is 1 between b and c). Points c and d define the right side (falls from 1 at c to 0 at d). Values outside [a, d] have 0 membership.
+Example: soil_moisture['Dry'] = fuzz.trapmf(..., [0, 0, 20, 40]). Membership is 1 from 0 to 20, and linearly decreases from 1 at 20 to 0 at 40.
+fuzz.trimf(universe, [a, b, c]): Defines a triangular membership function. Point a is the left base (membership 0). Point b is the peak (membership 1). Point c is the right base (membership 0). Membership increases linearly from a to b and decreases linearly from b to c.
+Example: soil_moisture['Moist'] = fuzz.trimf(..., [30, 50, 70]). Membership is 0 at 30, rises to 1 at 50, and falls back to 0 at 70.
+The function returns the defined soil_moisture, temperature, and water_flow objects.
+3. define_fuzzy_rules() function:
+
+Python
+
+def define_fuzzy_rules(soil_moisture, temperature, water_flow):
+    """
+    Define the fuzzy rules for the system.
+    """
+    rules = [
+        ctrl.Rule(soil_moisture['Dry'] & temperature['High'], water_flow['High']),
+        ctrl.Rule(soil_moisture['Dry'] & temperature['Medium'], water_flow['Medium']),
+        ctrl.Rule(soil_moisture['Dry'] & temperature['Low'], water_flow['Medium']), # Note: Dry & Low Temp => Medium Flow
+        ctrl.Rule(soil_moisture['Moist'] & temperature['High'], water_flow['Medium']),
+        ctrl.Rule(soil_moisture['Moist'] & temperature['Medium'], water_flow['Low']), # Note: Moist & Medium Temp => Low Flow
+        ctrl.Rule(soil_moisture['Moist'] & temperature['Low'], water_flow['Low']),
+        ctrl.Rule(soil_moisture['Wet'] & temperature['High'], water_flow['Low']),
+        ctrl.Rule(soil_moisture['Wet'] & temperature['Medium'], water_flow['Low']),
+        ctrl.Rule(soil_moisture['Wet'] & temperature['Low'], water_flow['Low']),
+    ]
+    return rules
+Purpose: This function defines the rule base of the fuzzy system. Each rule is an "IF-THEN" statement that links conditions on the input fuzzy sets to actions on the output fuzzy sets.
+ctrl.Rule(antecedent_condition, consequent_action): Creates a single fuzzy rule.
+antecedent_condition: This is the "IF" part. It combines fuzzy sets of the input variables using logical operators. The & symbol represents a fuzzy AND operation (typically implemented as the minimum of the membership degrees).
+Example: soil_moisture['Dry'] & temperature['High'] means "IF (soil moisture is Dry) AND (temperature is High)".
+consequent_action: This is the "THEN" part. It specifies the fuzzy set of the output variable that is affected by this rule.
+Example: water_flow['High'] means "THEN water flow should be High".
+The code defines 9 rules covering different combinations of soil moisture (Dry, Moist, Wet) and temperature (Low, Medium, High).
+The function returns a list of these ctrl.Rule objects.
+4. create_fuzzy_system() function:
+
+Python
+
+def create_fuzzy_system(rules):
+    """
+    Create and return the fuzzy control system and simulation object.
+    """
+    irrigation_ctrl = ctrl.ControlSystem(rules)
+    return ctrl.ControlSystemSimulation(irrigation_ctrl)
+Purpose: This function takes the defined rules and creates the executable fuzzy control system.
+ctrl.ControlSystem(rules): Creates the core fuzzy control system object by collecting all the defined rules. This object encapsulates the fuzzy logic structure (variables and rules).
+ctrl.ControlSystemSimulation(control_system): Creates a simulation object for the control system. This object allows you to feed crisp input values, run the fuzzy inference process, and get crisp output values. It handles the steps of fuzzification, rule evaluation, aggregation, and defuzzification.
+The function returns the simulation object, which is ready to take inputs and compute outputs.
+5. main() function:
+
+Python
+
+def main():
+    # Define fuzzy variables
+    soil_moisture, temperature, water_flow = define_fuzzy_variables()
+
+    # Define fuzzy rules
+    rules = define_fuzzy_rules(soil_moisture, temperature, water_flow)
+
+    # Create fuzzy system simulation
+    irrigation_sim = create_fuzzy_system(rules)
+
+    # Get user input
+    try:
+        soil_moisture_input = float(input("Enter the soil moisture level (0-100%): "))
+        temperature_input = float(input("Enter the temperature (°C) (0-50): "))
+
+        # Validate inputs
+        if not (0 <= soil_moisture_input <= 100):
+            raise ValueError("Soil moisture must be between 0 and 100.")
+        if not (0 <= temperature_input <= 50):
+            raise ValueError("Temperature must be between 0 and 50.")
+
+        # Set inputs
+        irrigation_sim.input['soil_moisture'] = soil_moisture_input
+        irrigation_sim.input['temperature'] = temperature_input
+
+        # Compute output
+        irrigation_sim.compute()
+
+        # Display results
+        print(f"\nSoil Moisture Input: {soil_moisture_input}%")
+        print(f"Temperature Input: {temperature_input}°C")
+        print(f"Recommended Water Flow: {irrigation_sim.output['water_flow']:.2f}%")
+
+    except ValueError as e:
+        print(f"Error: {e}")
+Purpose: This is the main execution block of the script. It orchestrates the creation of the fuzzy system and handles user interaction.
+Calls to other functions: It calls define_fuzzy_variables(), define_fuzzy_rules(), and create_fuzzy_system() in order to set up the fuzzy logic controller.
+User Input (input(...)): Prompts the user to enter values for soil moisture and temperature. float() converts the input strings into floating-point numbers.
+Error Handling (try...except ValueError): This block attempts to execute the code within the try block. If a ValueError occurs (e.g., if the user enters non-numeric input or inputs outside the validated range), the code inside the except block is executed, printing an error message.
+Input Validation (if not (...)): Checks if the entered inputs are within the expected valid ranges (0-100 for soil moisture, 0-50 for temperature). If not, it raises a ValueError with a descriptive message.
+Setting Inputs (irrigation_sim.input[...] = ...): Sets the crisp input values provided by the user to the corresponding variables in the fuzzy simulation object.
+Computing Output (irrigation_sim.compute()): This is the core step where the fuzzy logic inference process takes place:
+Fuzzification: The crisp input values (soil moisture and temperature) are fuzzified. The system determines the degree to which each input belongs to each of its fuzzy sets (e.g., how 'Dry', 'Moist', and 'Wet' a soil moisture value of 45% is).
+Rule Evaluation: Each rule's antecedent (IF part) is evaluated using the fuzzy input values. For rules with multiple conditions linked by AND (&), the minimum of the membership degrees is typically taken (this is the default t-norm in skfuzzy). This gives each rule a "firing strength".
+Aggregation: The consequent (THEN part) of each rule is truncated or scaled based on the rule's firing strength. The outputs from all rules affecting a specific output variable (water_flow) are combined (aggregated) into a single fuzzy set (this is typically done by taking the maximum of the truncated/scaled output sets).
+Defuzzification: The aggregated fuzzy set for the output variable (water_flow) is converted back into a single, crisp numerical value. The default method in skfuzzy is the Centroid method, which calculates the center of mass of the aggregated output fuzzy set.
+Displaying Results (print(...)): Prints the input values and the calculated crisp output value for water_flow (formatted to two decimal places).
+6. if __name__ == "__main__": block:
+
+Python
+
+if __name__ == "__main__":
+    main()
+Purpose: This is a standard Python construct. It ensures that the main() function is called only when the script is executed directly (not when it's imported as a module into another script).   

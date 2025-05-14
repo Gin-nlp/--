@@ -1,0 +1,152 @@
+
+# Check Python version and upgrade pip, then install fcmeans in the current environment
+import sys
+print('Python version:', sys.version)
+!{sys.executable} -m pip install --upgrade pip
+!{sys.executable} -m pip install fcmeans
+# -*- coding: utf-8 -*-
+"""
+Python Code
+"""
+
+
+# Install required libraries before running:
+# pip install fcmeans numpy matplotlib scikit-learn
+
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.datasets import make_blobs, load_iris
+from fcmeans import FCM
+
+# Dataset 1: Synthetic blobs
+X1, y1 = make_blobs(n_samples=150, centers=3, n_features=2, random_state=42)
+
+# Dataset 2: Iris (first two features)
+iris = load_iris()
+X2 = iris.data[:, [0, 1]] # Using Sepal Length and Sepal Width
+
+
+# Run FCM on dataset 1
+fcm1 = FCM(n_clusters=3)
+fcm1.fit(X1)
+labels1 = fcm1.predict(X1)
+centers1 = fcm1.centers
+
+# Run FCM on dataset 2
+fcm2 = FCM(n_clusters=3)
+fcm2.fit(X2)
+labels2 = fcm2.predict(X2)
+centers2 = fcm2.centers
+
+
+# Plotting results
+plt.figure(figsize=(12, 5))
+
+# Plot for dataset 1
+plt.subplot(1, 2, 1)
+plt.scatter(X1[:, 0], X1[:, 1], c=labels1, cmap='viridis')
+plt.scatter(centers1[:, 0], centers1[:, 1], marker='X', s=200, c='red')
+plt.title("FCM on Synthetic Dataset")
+plt.xlabel("Feature 1")
+plt.ylabel("Feature 2")
+
+# Plot for dataset 2
+plt.subplot(1, 2, 2)
+plt.scatter(X2[:, 0], X2[:, 1], c=labels2, cmap='plasma')
+plt.scatter(centers2[:, 0], centers2[:, 1], marker='X', s=200, c='red')
+plt.title("FCM on Iris Dataset")
+plt.xlabel("Feature 1")
+plt.ylabel("Feature 2")
+
+plt.show()
+
+
+
+--------------------------------------------------------------------------------------------------------------
+
+
+Header Comments: The initial lines are comments describing the file encoding and a brief title. The commented-out line # pip install ... is a helpful reminder of the libraries needed to run this code; you'd execute this command in your terminal (or a Colab code cell) if you don't have the libraries installed.
+Imports:
+import numpy as np: Imports the NumPy library, essential for numerical operations and handling arrays (like your datasets).
+import matplotlib.pyplot as plt: Imports the Matplotlib library's plotting module, used to create visualizations.
+from sklearn.datasets import make_blobs, load_iris: Imports two functions from scikit-learn:
+make_blobs: A function to generate synthetic (artificial) datasets with distinct clusters.
+load_iris: A function to load the classic Iris plant dataset.
+from fcmeans import FCM: This is the key import. It imports the FCM class from the fcmeans library, which provides the implementation of the Fuzzy C-Means algorithm you will use. This library has an API (.fit(), .predict(), .centers) that is convenient and similar to scikit-learn's clustering algorithms.
+<!-- end list -->
+
+Python
+
+# Dataset 1: Synthetic blobs
+X1, y1 = make_blobs(n_samples=150, centers=3, n_features=2, random_state=42)
+
+# Dataset 2: Iris (first two features)
+iris = load_iris()
+X2 = iris.data[:, [0, 1]] # Using Sepal Length and Sepal Width
+Dataset Preparation:
+Dataset 1 (Synthetic Blobs):
+X1, y1 = make_blobs(...): This line generates your first dataset.
+n_samples=150: Creates a dataset containing 150 data points.
+centers=3: The data points are generated around 3 distinct cluster centers.
+n_features=2: Each data point has 2 features (dimensions), effectively giving it an x and y coordinate, which is perfect for 2D plotting.
+random_state=42: Ensures that the random generation process is the same every time you run the code, so you get the exact same dataset X1.
+X1 stores the generated feature data (a NumPy array of shape 150x2). y1 stores the true, underlying cluster labels for these points (shape 150x1), but FCM is unsupervised and does not use these true labels during clustering.
+Dataset 2 (Iris):
+iris = load_iris(): Loads the Iris dataset, which contains measurements of 150 iris flowers from 3 different species. It has 4 features (sepal length, sepal width, petal length, petal width) and their corresponding species labels.
+X2 = iris.data[:, [0, 1]]: The Iris dataset has 4 features, but for simple 2D plotting, you need to select just two. This line selects all rows (:) but only the columns at index 0 and 1 ([0, 1]) from the iris.data array. These correspond to the Sepal Length and Sepal Width measurements for all 150 flowers. X2 is now a NumPy array of shape 150x2.
+<!-- end list -->
+
+Python
+
+# Run FCM on dataset 1
+fcm1 = FCM(n_clusters=3)
+fcm1.fit(X1)
+labels1 = fcm1.predict(X1)
+centers1 = fcm1.centers
+
+# Run FCM on dataset 2
+fcm2 = FCM(n_clusters=3)
+fcm2.fit(X2)
+labels2 = fcm2.predict(X2)
+centers2 = fcm2.centers
+FCM Clustering: This is where the Fuzzy C-Means algorithm is applied.
+For Dataset 1 (X1):
+fcm1 = FCM(n_clusters=3): An object (an "instance") of the FCM class is created. You specify the desired number of clusters to find (n_clusters=3). Other FCM parameters (like the fuzzification parameter m, which defaults to 2 in this library) use their default values.
+fcm1.fit(X1): This is the core command that runs the FCM algorithm. The algorithm iteratively adjusts cluster centers and calculates fuzzy membership degrees for each point in X1 until it converges or reaches the maximum number of iterations (default max_iter in this library might be 100 or more). After this line executes, the fcm1 object holds the results of the clustering.
+labels1 = fcm1.predict(X1): The .predict() method is called on the fitted object. For each data point in X1, it determines which cluster the point belongs to most strongly (i.e., the cluster where it has the highest membership degree) and returns an array of these hard cluster assignments (labels 0, 1, or 2).
+centers1 = fcm1.centers: Accesses the final coordinates of the calculated cluster centers from the fitted fcm1 object.
+For Dataset 2 (X2):
+The process is exactly the same as for Dataset 1. A new FCM object fcm2 is created and fitted to the Iris data X2. The hard labels are predicted into labels2, and the centers are stored in centers2.
+<!-- end list -->
+
+Python
+
+# Plotting results
+plt.figure(figsize=(12, 5))
+
+# Plot for dataset 1
+plt.subplot(1, 2, 1)
+plt.scatter(X1[:, 0], X1[:, 1], c=labels1, cmap='viridis')
+plt.scatter(centers1[:, 0], centers1[:, 1], marker='X', s=200, c='red')
+plt.title("FCM on Synthetic Dataset")
+plt.xlabel("Feature 1")
+plt.ylabel("Feature 2")
+
+# Plot for dataset 2
+plt.subplot(1, 2, 2)
+plt.scatter(X2[:, 0], X2[:, 1], c=labels2, cmap='plasma')
+plt.scatter(centers2[:, 0], centers2[:, 1], marker='X', s=200, c='red')
+plt.title("FCM on Iris Dataset")
+plt.xlabel("Feature 1")
+plt.ylabel("Feature 2")
+
+plt.show()
+Plotting Results: This block creates and displays the visualizations of the clustering results.
+plt.figure(figsize=(12, 5)): Creates a new figure to draw the plots on, setting its size to be 12 inches wide and 5 inches tall.
+plt.subplot(1, 2, 1): This command is used to create a grid of plots within the figure and select one to draw on. (1, 2, 1) means a grid with 1 row and 2 columns, and this command selects the first plot (the one on the left).
+plt.scatter(X1[:, 0], X1[:, 1], c=labels1, cmap='viridis'): This plots the data points from the synthetic dataset (X1). X1[:, 0] gets all the x-coordinates (Feature 1), and X1[:, 1] gets all the y-coordinates (Feature 2). c=labels1 tells Matplotlib to color each point according to its predicted cluster label (labels1). cmap='viridis' specifies the color scheme to use. This visually groups the points based on their assigned cluster.
+plt.scatter(centers1[:, 0], centers1[:, 1], marker='X', s=200, c='red'): This plots the calculated cluster centers (centers1). They are plotted as 'X' markers (marker='X'), made large (s=200), and colored red (c='red') so they are easily visible on top of the data points.
+plt.title(...), plt.xlabel(...), plt.ylabel(...): Adds a title and labels for the x and y axes to the first subplot, making it informative.
+plt.subplot(1, 2, 2): Selects the second plot in the 1x2 grid (the one on the right).
+The plotting code for Dataset 2 (X2, Iris) is the same as for Dataset 1, but it uses X2, labels2, centers2, and a different colormap (plasma). The labels are also generic "Feature 1" and "Feature 2".
+plt.show(): This command displays the figure with both subplots containing the scattered data points (colored by assigned cluster) and the marked cluster centers.

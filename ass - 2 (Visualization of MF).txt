@@ -1,0 +1,305 @@
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+def linearFunction (points, inputRange):
+  values=[]
+  for x in inputRange:
+    if x < points['a']:
+      values.append(0)
+
+    elif x >= points['a'] and x < points['b'] :
+     result =(x-points['a'])/(points['b']-points['a'])
+     values.append(result)
+
+
+    elif x >= points['b']:
+      values.append(1)
+
+  return values
+
+def triangularFunction (points, inputRange):
+  values=[]
+  for x in inputRange:
+    if x < points['a']:
+      values.append(0)
+
+    elif x >= points['a'] and x < points['b'] :
+     result =(x-points['a'])/(points['b']-points['a'])
+     values.append(result)
+
+
+    elif x >= points['b'] and x < points['c'] :
+      result =(points['c']-x)/(points['c']-points['b'])
+      values.append(result)
+
+
+    elif x >= points['c']:
+      values.append(0)
+
+  return values
+
+def trapezoidalFunction (points, inputRange):
+
+  values=[]
+  for x in inputRange:
+    if x < points['a']:
+      values.append(0)
+
+    elif x >= points['a'] and x < points['b'] :
+     result =(x-points['a'])/(points['b']-points['a'])
+     values.append(result)
+
+
+    elif x >= points['b'] and x <= points['c'] :
+      values.append(1)
+
+
+    elif x >= points['c'] and x <= points['d'] :
+      result =(points['d']-x)/(points['d']-points['c'])
+      values.append(result)
+
+    elif x >= points['d']:
+      values.append(0)
+
+  return values
+
+
+def gaussianFunction (points, inputRange):
+
+  values=[]
+
+  #calculate mean
+  input_mean = np.mean(inputRange)
+
+  # std deviation
+  std_dev = np.std(inputRange)
+
+  exponent_power = (-0.5 * ((inputRange - input_mean) / std_dev) ** 2)
+  exponent = np.exp(exponent_power) #actual exponent value of membership function
+
+  return exponent
+
+
+points = {'a':1, 'b':4 ,'c':8, 'd':10, 'e':12}
+inputRange= [-2,0,1,2,3,4,5,6,8,10,12,14]
+
+output_linear = linearFunction(points, inputRange)
+print(output_linear)
+
+output_triangular = triangularFunction(points, inputRange)
+print(output_triangular)
+
+output_trapezoidal = trapezoidalFunction(points, inputRange)
+print(output_trapezoidal)
+
+
+output_gaussian = gaussianFunction(points, inputRange)
+print(output_gaussian)
+
+plt.subplot(2,2,1)
+plt.plot(inputRange,output_linear)
+
+plt.subplot(2,2,2)
+plt.plot(inputRange,output_triangular)
+
+plt.subplot(2,2,3)
+plt.plot(inputRange,output_trapezoidal)
+
+
+plt.subplot(2,2,4)
+plt.plot(inputRange,output_gaussian)
+
+plt.show()
+
+plt.figure(figsize=(10, 6))
+plt.plot(inputRange, output_linear, label="Linear Function", color="blue", linestyle= "dotted")
+plt.plot(inputRange, output_triangular, label="Triangular Function", color="green",linestyle= "dotted")
+plt.plot(inputRange, output_trapezoidal, label="Trapezoidal Function", color="orange", linestyle= "dotted")
+plt.plot(inputRange, output_gaussian, label="Gaussian Function", color="red", linestyle= "dotted")
+
+plt.title("Comparison of Membership Functions")
+plt.xlabel("Input Range")
+plt.ylabel("Membership Degree")
+plt.legend()
+plt.grid()
+plt.show()
+
+
+--------------------------------------------------------------------------------------------------------------
+
+
+2. Membership Function Definitions:
+
+The code defines four functions, each calculating the membership degree for a given set of input values (inputRange) based on different shapes defined by points.
+
+linearFunction (points, inputRange):
+
+Python
+
+def linearFunction (points, inputRange):
+  values=[]
+  for x in inputRange:
+    if x < points['a']:
+      values.append(0) # Membership is 0 before point 'a'
+
+    elif x >= points['a'] and x < points['b'] :
+     # Membership increases linearly between 'a' and 'b'
+     result =(x-points['a'])/(points['b']-points['a'])
+     values.append(result)
+
+    elif x >= points['b']:
+      values.append(1) # Membership is 1 at and after point 'b'
+
+  return values
+This function calculates a membership degree that starts at 0, linearly increases from points['a'] to points['b'], and then stays at 1 for all values greater than or equal to points['b']. It's a specific type of ramp or step-like linear function segment.
+Takes points (a dictionary expected to have keys 'a' and 'b') and inputRange (a list or array of numbers).
+It iterates through each value x in the inputRange.
+It applies the defined piecewise linear logic based on the locations of a and b.
+triangularFunction (points, inputRange):
+
+Python
+
+def triangularFunction (points, inputRange):
+  values=[]
+  for x in inputRange:
+    if x < points['a']:
+      values.append(0) # Membership is 0 before point 'a'
+
+    elif x >= points['a'] and x < points['b'] :
+     # Membership increases linearly from 0 at 'a' to 1 at 'b' (left slope)
+     result =(x-points['a'])/(points['b']-points['a'])
+     values.append(result)
+
+    elif x >= points['b'] and x < points['c'] :
+      # Membership decreases linearly from 1 at 'b' to 0 at 'c' (right slope)
+      result =(points['c']-x)/(points['c']-points['b'])
+      values.append(result)
+
+    elif x >= points['c']:
+      values.append(0) # Membership is 0 at and after point 'c'
+
+  return values
+This function calculates the membership degree for a standard triangular membership function.
+Takes points (a dictionary expected to have keys 'a', 'b', and 'c') and inputRange.
+a and c are the base points (where membership is 0).
+b is the peak point (where membership is 1).
+Membership increases linearly from a to b and decreases linearly from b to c.
+trapezoidalFunction (points, inputRange):
+
+Python
+
+def trapezoidalFunction (points, inputRange):
+  values=[]
+  for x in inputRange:
+    if x < points['a']:
+      values.append(0) # Membership is 0 before 'a'
+
+    elif x >= points['a'] and x < points['b'] :
+     # Membership increases linearly from 0 at 'a' to 1 at 'b' (left slope)
+     result =(x-points['a'])/(points['b']-points['a'])
+     values.append(result)
+
+    elif x >= points['b'] and x <= points['c'] :
+      values.append(1) # Membership is 1 between 'b' and 'c' (plateau)
+
+    elif x >= points['c'] and x <= points['d'] :
+      # Membership decreases linearly from 1 at 'c' to 0 at 'd' (right slope)
+      result =(points['d']-x)/(points['d']-points['c'])
+      values.append(result)
+
+    elif x > points['d']: # Should technically be x > points['d']
+      values.append(0) # Membership is 0 after 'd'
+
+  return values
+This function calculates the membership degree for a standard trapezoidal membership function.
+Takes points (a dictionary expected to have keys 'a', 'b', 'c', and 'd') and inputRange.
+a and d are the base points (where membership starts/ends at 0).
+b and c are the points where membership is 1, forming a plateau.
+Membership increases from a to b, is 1 between b and c, and decreases from c to d.
+gaussianFunction (points, inputRange):
+
+Python
+
+def gaussianFunction (points, inputRange):
+  values=[]
+  # Calculate mean and std deviation from the INPUT RANGE itself
+  # NOTE: This is not the standard way to define Gaussian MFs which use fixed parameters
+  input_mean = np.mean(inputRange)
+  std_dev = np.std(inputRange)
+
+  # Calculate the exponent term of the Gaussian formula
+  exponent_power = (-0.5 * ((inputRange - input_mean) / std_dev) ** 2)
+  # Calculate the actual membership value using the exponent
+  exponent = np.exp(exponent_power)
+
+  return exponent # Returns a NumPy array directly
+This function calculates values following a Gaussian (bell-shaped) distribution.
+Takes points (a dictionary, but note that the values in points are NOT used in this function's calculation).
+Takes inputRange.
+Important Note: Unlike standard Gaussian membership functions which are defined by a specific mean (μ) and standard deviation (σ) as parameters (like 'a' and 'b' for triangles), this code calculates the mean and standard deviation directly from the provided inputRange data points. This means the resulting Gaussian curve will be centered at the average value of your input samples and its width will depend on the spread of those samples, rather than being defined by fixed parameters specific to the fuzzy set.
+It uses the formula for the Gaussian function: f(x)=e 
+−0.5∗((x−μ)/σ) 
+2
+ 
+ , where μ is the mean and σ is the standard deviation.
+It leverages NumPy for efficient array calculations.
+3. Execution and Plotting:
+
+Python
+
+points = {'a':1, 'b':4 ,'c':8, 'd':10, 'e':12} # Define parameter points (note 'e' is unused)
+inputRange= [-2,0,1,2,3,4,5,6,8,10,12,14] # Define the range of x-values to evaluate
+
+# Calculate membership values for each function using the defined points and input range
+output_linear = linearFunction(points, inputRange)
+print(output_linear) # Print the list of values
+
+output_triangular = triangularFunction(points, inputRange)
+print(output_triangular) # Print the list of values
+
+output_trapezoidal = trapezoidalFunction(points, inputRange)
+print(output_trapezoidal) # Print the list of values
+
+output_gaussian = gaussianFunction(points, inputRange)
+print(output_gaussian) # Print the array of values
+
+# --- Plotting Block 1: Subplots ---
+plt.subplot(2,2,1) # Selects the first plot in a 2x2 grid
+plt.plot(inputRange,output_linear) # Plots the linear function output
+
+plt.subplot(2,2,2) # Selects the second plot (top right)
+plt.plot(inputRange,output_triangular) # Plots the triangular function output
+
+plt.subplot(2,2,3) # Selects the third plot (bottom left)
+plt.plot(inputRange,output_trapezoidal) # Plots the trapezoidal function output
+
+plt.subplot(2,2,4) # Selects the fourth plot (bottom right)
+plt.plot(inputRange,output_gaussian) # Plots the gaussian function output
+
+plt.show() # Displays the 2x2 grid of plots
+
+# --- Plotting Block 2: Single Comparison Plot ---
+plt.figure(figsize=(10, 6)) # Creates a new, larger figure
+
+# Plot each function on the same axes with labels and styles
+plt.plot(inputRange, output_linear, label="Linear Function", color="blue", linestyle= "dotted")
+plt.plot(inputRange, output_triangular, label="Triangular Function", color="green",linestyle= "dotted")
+plt.plot(inputRange, output_trapezoidal, label="Trapezoidal Function", color="orange", linestyle= "dotted")
+plt.plot(inputRange, output_gaussian, label="Gaussian Function", color="red", linestyle= "dotted")
+
+# Add plot enhancements
+plt.title("Comparison of Membership Functions")
+plt.xlabel("Input Range")
+plt.ylabel("Membership Degree")
+plt.legend() # Show the legend to identify lines
+plt.grid() # Add a grid for readability
+plt.show() # Displays the comparison plot
+points = {'a':1, ...}: A dictionary points is created, containing the parameters ('a', 'b', 'c', 'd', 'e') needed by the different functions. Note that 'e' is defined but never used by any of the provided function definitions.
+inputRange = [...]: A list (which NumPy functions will treat as an array) of specific numerical values is defined. The functions will calculate the membership degree for each of these values.
+The script then calls each of the four function definitions, passing the points dictionary and the inputRange.
+The calculated membership degrees for each input value are stored in output_linear, output_triangular, etc., and printed to the console.
+Finally, matplotlib.pyplot is used to plot these results.
+The first plotting block uses plt.subplot to create a 2x2 grid, displaying each function on its own separate graph.
+The second plotting block creates a single, larger graph and plots all four membership functions together on the same axes, allowing for easy comparison. Labels, a title, axis labels, a legend, and a grid are added for clarity.
+plt.show() is called after each plotting block to render the generated figures.

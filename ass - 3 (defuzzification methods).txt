@@ -1,0 +1,494 @@
+using trapozidal 
+
+# -*- coding: utf-8 -*-
+"""
+Soft Computing Practical: Defuzzification Methods Implementation from Scratch
+(Using a Trapezoidal Fuzzy Set)
+
+Aim: Implement and compare different defuzzification methods calculation
+     without using scikit-fuzzy's built-in defuzz function,
+     specifically using a trapezoidal input shape.
+"""
+
+import numpy as np
+import skfuzzy as fuzz # Using skfuzzy only to generate the sample fuzzy set shape
+import matplotlib.pyplot as plt
+
+# --- 1. Define the Universe of Discourse for the Output Variable ---
+# Let's assume the output variable ranges from 0 to 100.
+# We use a small step for better approximation in methods like Centroid and Bisector.
+universe = np.arange(0, 101, 0.1) # Use a smaller step for better approximation
+
+# --- 2. Create a Sample Aggregated Fuzzy Set (Trapezoidal Shape) ---
+# We will use a single trapezoidal membership function as the input shape
+# for the defuzzification methods.
+
+# Define the parameters for the trapezoidal shape [a, b, c, d]
+# where 'a' and 'd' are the base points (membership 0) and 'b' and 'c' form the plateau (membership 1)
+trap_params = [20, 40, 60, 80] # Example: trapezoid from 20 to 80, plateau from 40 to 60
+
+# Generate the membership degrees for the universe using the trapezoidal shape
+aggregated_mf_values = fuzz.trapmf(universe, trap_params)
+
+# --- 3. Implement Defuzzification Methods Manually (Same as before) ---
+# These functions take x_values (universe) and y_values (aggregated_mf_values)
+
+def centroid_defuzz(x_values, y_values):
+    """
+    Calculates the crisp value using the Centroid of Area (COA) method.
+    Formula: sum(x * mu(x)) / sum(mu(x)) for discrete values.
+    """
+    numerator = np.sum(x_values * y_values)
+    denominator = np.sum(y_values)
+
+    if denominator == 0:
+        print("Warning: Sum of membership values is zero. Centroid is undefined.")
+        return 0 # Or np.nan or x_values.mean()
+
+    return numerator / denominator
+
+def bisector_defuzz(x_values, y_values):
+    """
+    Calculates the crisp value using the Bisector of Area (BOA) method.
+    Finds the x-value that divides the area under the curve into two equal halves.
+    Uses trapezoidal approximation for area calculation.
+    """
+    total_area = np.trapz(y_values, x_values) # NumPy's trapezoidal rule function
+
+    if total_area == 0:
+        print("Warning: Total area is zero. Bisector is undefined.")
+        return 0 # Or np.nan or x_values.mean()
+
+    half_area = total_area / 2.0
+    accumulated_area = 0.0
+
+    for i in range(len(x_values) - 1):
+        segment_area = 0.5 * (y_values[i] + y_values[i+1]) * (x_values[i+1] - x_values[i])
+        accumulated_area += segment_area
+
+        if accumulated_area >= half_area:
+             # Linear interpolation to find the precise bisector value
+            area_needed_in_segment = half_area - (accumulated_area - segment_area)
+            if segment_area == 0:
+                 bisector_value = x_values[i]
+            else:
+                 bisector_value = x_values[i] + (x_values[i+1] - x_values[i]) * (area_needed_in_segment / segment_area)
+            return bisector_value
+
+    # Fallback if something goes wrong
+    print("Error: Bisector calculation failed.")
+    return x_values.mean() # Or another fallback
+
+
+def mean_of_maximum_defuzz(x_values, y_values):
+    """
+    Calculates the crisp value using the Mean of Maximum (MOM) method.
+    Takes the average of all x-values that have the maximum membership degree.
+    """
+    max_mu = np.max(y_values)
+
+    if max_mu == 0:
+        print("Warning: Maximum membership is zero. MOM is undefined.")
+        return 0 # Or np.nan or x_values.mean()
+
+    # Find all x values where the membership is equal to the maximum (which is 1.0 for the plateau)
+    x_at_max = x_values[y_values == max_mu]
+
+    # Calculate the mean of these x values (the middle of the plateau)
+    return np.mean(x_at_max)
+
+def smallest_of_maximum_defuzz(x_values, y_values):
+    """
+    Calculates the crisp value using the Smallest of Maximum (SOM) method.
+    Takes the smallest x-value that has the maximum membership degree.
+    """
+    max_mu = np.max(y_values)
+
+    if max_mu == 0:
+        print("Warning: Maximum membership is zero. SOM is undefined.")
+        return 0 # Or np.nan or x_values.mean()
+
+    # Find all x values where the membership is equal to the maximum
+    x_at_max = x_values[y_values == max_mu]
+
+    # Return the minimum of these x values (the start of the plateau)
+    return np.min(x_at_max)
+
+def largest_of_maximum_defuzz(x_values, y_values):
+    """
+    Calculates the crisp value using the Largest of Maximum (LOM) method.
+    Takes the largest x-value that has the maximum membership degree.
+    """
+    max_mu = np.max(y_values)
+
+    if max_mu == 0:
+        print("Warning: Maximum membership is zero. LOM is undefined.")
+        return 0 # Or np.nan or x_values.mean()
+
+    # Find all x values where the membership is equal to the maximum
+    x_at_max = x_values[y_values == max_mu]
+
+    # Return the maximum of these x values (the end of the plateau)
+    return np.max(x_at_max)
+
+# --- 4. Execute and Compare ---
+
+if __name__ == "__main__":
+    print("Universe of Discourse defined from", universe.min(), "to", universe.max(), "with step", universe[1]-universe[0])
+    print("Using a Trapezoidal Fuzzy Set defined by points:", trap_params)
+    # print("Sample Aggregated Fuzzy Set Values:", aggregated_mf_values) # Uncomment to see the values
+
+    # Dictionary to store the results from our custom functions
+    custom_results = {}
+
+    print("\nCalculating Crisp Values using Custom Functions:")
+
+    custom_results['centroid'] = centroid_defuzz(universe, aggregated_mf_values)
+    print(f"  - CENTROID (COA): {custom_results['centroid']:.2f}")
+
+    custom_results['bisector'] = bisector_defuzz(universe, aggregated_mf_values)
+    print(f"  - BISECTOR (BOA): {custom_results['bisector']:.2f}")
+
+    custom_results['mom'] = mean_of_maximum_defuzz(universe, aggregated_mf_values)
+    print(f"  - MEAN OF MAXIMUM (MOM): {custom_results['mom']:.2f}")
+
+    custom_results['som'] = smallest_of_maximum_defuzz(universe, aggregated_mf_values)
+    print(f"  - SMALLEST OF MAXIMUM (SOM): {custom_results['som']:.2f}")
+
+    custom_results['lom'] = largest_of_maximum_defuzz(universe, aggregated_mf_values)
+    print(f"  - LARGEST OF MAXIMUM (LOM): {custom_results['lom']:.2f}")
+
+    # --- 5. Visualize the Results ---
+
+    plt.figure(figsize=(12, 7))
+
+    # Plot the aggregated fuzzy set (the trapezoid)
+    plt.plot(universe, aggregated_mf_values, label='Trapezoidal Fuzzy Set', color='blue', linewidth=2)
+
+    # Plot a vertical line for each defuzzified crisp value
+    colors = ['red', 'green', 'purple', 'orange', 'brown']
+    linestyles = ['--', '-.', ':', '--', '-']
+
+    # Ensure keys are in a consistent order for plotting colors/styles
+    method_order = ['centroid', 'bisector', 'mom', 'som', 'lom']
+
+    for i, method in enumerate(method_order):
+        if method in custom_results:
+             value = custom_results[method]
+             plt.axvline(x=value, color=colors[i], linestyle=linestyles[i],
+                         label=f'{method.upper()}: {value:.2f}')
+
+
+    # Add plot enhancements
+    plt.title('Comparison of Defuzzification Methods on a Trapezoidal Shape')
+    plt.xlabel('Output Variable Value (Universe of Discourse)')
+    plt.ylabel('Membership Degree')
+    plt.legend()
+    plt.grid(True, linestyle='--', alpha=0.6)
+    plt.ylim(-0.05, 1.05) # Extend y-axis slightly for better visualization
+    plt.xlim(universe.min(), universe.max()) # Set x-axis limits
+
+    plt.show()
+
+
+
+--------------------------------------------------------------------------------------------------------------
+
+
+
+Purpose: Defuzzification is the process of converting a fuzzy set (which represents a range of possible output values with varying degrees of membership) into a single, crisp (precise numerical) value. This is the final step in a fuzzy inference system, where the fuzzy output needs to be translated into a concrete action or decision.
+
+The code provides manual implementations for five common defuzzification methods:
+
+Centroid of Area (COA)
+Bisector of Area (BOA)
+Mean of Maximum (MOM)
+Smallest of Maximum (SOM)
+Largest of Maximum (LOM)
+It 1  then applies these methods to a sample trapezoidal fuzzy set and visualizes where each method's result falls on the x-axis.   
+1.
+WO2021018929A1 - A computer-implemented method, a system ...
+patents.google.com
+
+Code Breakdown:
+
+Python
+
+# -*- coding: utf-8 -*-
+"""
+Soft Computing Practical: Defuzzification Methods Implementation from Scratch
+(Using a Trapezoidal Fuzzy Set)
+
+Aim: Implement and compare different defuzzification methods calculation
+     without using scikit-fuzzy's built-in defuzz function,
+     specifically using a trapezoidal input shape.
+"""
+
+import numpy as np
+import skfuzzy as fuzz # Using skfuzzy only to generate the sample fuzzy set shape
+import matplotlib.pyplot as plt
+Header Comments: Explains the purpose of the script (implementing defuzzification manually), its aim (comparison), and specifically mentions using a trapezoidal shape.
+Imports:
+import numpy as np: Imports the NumPy library, which is fundamental for numerical computations, especially handling arrays and mathematical operations efficiently. We use it for creating the universe, performing sums, finding max/mean/min, and calculating areas (np.trapz).
+import skfuzzy as fuzz: Imports the scikit-fuzzy library. Crucially, this library is only used here to easily generate the shape of the sample trapezoidal fuzzy set using its fuzz.trapmf function. It is not used for the defuzzification calculations themselves (which are implemented manually in the functions below).
+import matplotlib.pyplot as plt: Imports the plotting library to visualize the fuzzy set and the resulting crisp values from each defuzzification method.
+<!-- end list -->
+
+Python
+
+# --- 1. Define the Universe of Discourse for the Output Variable ---
+# Let's assume the output variable ranges from 0 to 100.
+# We use a small step for better approximation in methods like Centroid and Bisector.
+universe = np.arange(0, 101, 0.1) # Use a smaller step for better approximation
+Universe of Discourse:
+universe = np.arange(0, 101, 0.1): This line defines the set of all possible crisp values for the output variable. It creates a NumPy array starting from 0, going up to (but not including) 101, with a step of 0.1. This effectively covers the range [0, 100] with a high resolution (1001 points). Using a small step (0.1) is important because our manual defuzzification methods (especially Centroid and Bisector) approximate integrals or areas by summing over these discrete points. A finer resolution leads to a more accurate approximation.
+<!-- end list -->
+
+Python
+
+# --- 2. Create a Sample Aggregated Fuzzy Set (Trapezoidal Shape) ---
+# We will use a single trapezoidal membership function as the input shape
+# for the defuzzification methods.
+
+# Define the parameters for the trapezoidal shape [a, b, c, d]
+# where 'a' and 'd' are the base points (membership 0) and 'b' and 'c' form the plateau (membership 1)
+trap_params = [20, 40, 60, 80] # Example: trapezoid from 20 to 80, plateau from 40 to 60
+
+# Generate the membership degrees for the universe using the trapezoidal shape
+aggregated_mf_values = fuzz.trapmf(universe, trap_params)
+Sample Aggregated Fuzzy Set:
+trap_params = [20, 40, 60, 80]: This list defines the four critical x-coordinates for the trapezoidal shape:
+a = 20: The x-value where the left slope starts (membership is 0 before this).
+b = 40: The x-value where the left slope ends and the plateau begins (membership is 1 at and after this point).
+c = 60: The x-value where the plateau ends and the right slope begins (membership is 1 at and before this point).
+d = 80: The x-value where the right slope ends (membership is 0 at and after this point).
+aggregated_mf_values = fuzz.trapmf(universe, trap_params): This line uses the skfuzzy library function fuzz.trapmf to calculate the membership degree for each point in the universe array based on the defined trap_params. The result is a NumPy array (aggregated_mf_values) of the same length as universe, where each element is the membership degree (between 0 and 1) of the corresponding x-value in universe to this specific trapezoidal fuzzy set. This array aggregated_mf_values is the fuzzy set that our defuzzification methods will operate on.
+<!-- end list -->
+
+Python
+
+# --- 3. Implement Defuzzification Methods Manually (Same as before) ---
+# These functions take x_values (universe) and y_values (aggregated_mf_values)
+
+def centroid_defuzz(x_values, y_values):
+    """
+    Calculates the crisp value using the Centroid of Area (COA) method.
+    Formula: sum(x * mu(x)) / sum(mu(x)) for discrete values.
+    """
+    numerator = np.sum(x_values * y_values)
+    denominator = np.sum(y_values)
+
+    if denominator == 0:
+        print("Warning: Sum of membership values is zero. Centroid is undefined.")
+        return 0 # Handle the case where the fuzzy set has no area
+
+    return numerator / denominator
+centroid_defuzz(x_values, y_values):
+Implements the Centroid of Area (COA) or Center of Gravity (COG) method. Conceptually, it finds the center of mass of the area under the membership function curve.
+The formula for discrete data points is
+fracsum(x_itimesmu(x_i))summu(x_i), where x_i is an x-value in the universe and
+mu(x_i) is its membership degree (y_values[i]).
+np.sum(x_values * y_values): NumPy's element-wise multiplication (*) multiplies each x-value by its corresponding y-value (
+mu(x_i)). np.sum() then sums up all these products to get the numerator.
+np.sum(y_values): Sums up all the membership degrees to get the denominator.
+Includes a check if denominator == 0 to handle the edge case where the fuzzy set is completely empty (all membership values are 0), preventing division by zero.
+Returns the calculated crisp value.
+<!-- end list -->
+
+Python
+
+def bisector_defuzz(x_values, y_values):
+    """
+    Calculates the crisp value using the Bisector of Area (BOA) method.
+    Finds the x-value that divides the area under the curve into two equal halves.
+    Uses trapezoidal approximation for area calculation.
+    """
+    total_area = np.trapz(y_values, x_values) # NumPy's trapezoidal rule function
+
+    if total_area == 0:
+        print("Warning: Total area is zero. Bisector is undefined.")
+        return 0 # Handle zero area
+
+    half_area = total_area / 2.0
+    accumulated_area = 0.0
+
+    for i in range(len(x_values) - 1):
+        segment_area = 0.5 * (y_values[i] + y_values[i+1]) * (x_values[i+1] - x_values[i])
+        accumulated_area += segment_area
+
+        if accumulated_area >= half_area:
+             # Linear interpolation to find the precise bisector value within the segment
+            area_needed_in_segment = half_area - (accumulated_area - segment_area)
+            if segment_area == 0:
+                 bisector_value = x_values[i] # If segment is flat at 0, bisector is at start
+            else:
+                 # Estimate x within segment [x_i, x_{i+1}] where area accumulates to half_area
+                 # This linear interpolation assumes accumulated area changes linearly within the segment,
+                 # which is reasonable given the small step size of the universe.
+                 bisector_value = x_values[i] + (x_values[i+1] - x_values[i]) * (area_needed_in_segment / segment_area)
+            return bisector_value
+
+    # Fallback if loop finishes without returning (shouldn't happen with total_area > 0)
+    print("Error: Bisector calculation failed.")
+    return x_values.mean() # Return mean as a default fallback
+bisector_defuzz(x_values, y_values):
+Implements the Bisector of Area (BOA) method. It finds the x-value where a vertical line would divide the area under the membership function curve into two equal halves.
+total_area = np.trapz(y_values, x_values): Calculates the total area under the curve defined by the points (x_values, y_values) using NumPy's built-in trapezoidal integration function.
+Calculates half_area.
+It then loops through the points, calculating the area of each small trapezoidal segment between consecutive x-values and accumulating this area.
+if accumulated_area >= half_area:: When the accumulated area from the left side reaches or exceeds the half_area, the bisector point lies within or at the end of the current segment [x_values[i], x_values[i+1]].
+Linear interpolation is used to estimate the exact x-value within that segment where the area is exactly half_area. This provides a more accurate result than just picking x_values[i] or x_values[i+1].
+Includes checks for total_area == 0.
+<!-- end list -->
+
+Python
+
+def mean_of_maximum_defuzz(x_values, y_values):
+    """
+    Calculates the crisp value using the Mean of Maximum (MOM) method.
+    Takes the average of all x-values that have the maximum membership degree.
+    """
+    max_mu = np.max(y_values)
+
+    if max_mu == 0:
+        print("Warning: Maximum membership is zero. MOM is undefined.")
+        return 0 # Handle empty set
+
+    # Find all x values where the membership is equal to the maximum (which is 1.0 for the plateau)
+    x_at_max = x_values[y_values == max_mu]
+
+    # Calculate the mean of these x values (for the trapezoid, this is the middle of the plateau)
+    return np.mean(x_at_max)
+mean_of_maximum_defuzz(x_values, y_values):
+Implements the Mean of Maximum (MOM) method. It identifies the highest point(s) of the fuzzy set and takes the average of the x-values where this maximum membership occurs.
+max_mu = np.max(y_values): Finds the maximum membership degree in the fuzzy set. For our trapezoid, this will be 1.0.
+x_at_max = x_values[y_values == max_mu]: Uses NumPy's boolean indexing. It creates a boolean array (y_values == max_mu) that is True where y_values equals max_mu (i.e., on the plateau for the trapezoid) and False otherwise. It then uses this boolean array to select only the corresponding x-values from the x_values array. This results in an array containing all x-values on the plateau [40, 60].
+np.mean(x_at_max): Calculates the mean (average) of the x-values found on the plateau. For a plateau from 40 to 60, the mean is (40 + 60) / 2 = 50.
+Includes a check for max_mu == 0.
+<!-- end list -->
+
+Python
+
+def smallest_of_maximum_defuzz(x_values, y_values):
+    """
+    Calculates the crisp value using the Smallest of Maximum (SOM) method.
+    Takes the smallest x-value that has the maximum membership degree.
+    """
+    max_mu = np.max(y_values)
+
+    if max_mu == 0:
+        print("Warning: Maximum membership is zero. SOM is undefined.")
+        return 0 # Handle empty set
+
+    x_at_max = x_values[y_values == max_mu]
+
+    # Return the minimum of these x values (for the trapezoid, this is the start of the plateau)
+    return np.min(x_at_max)
+smallest_of_maximum_defuzz(x_values, y_values):
+Implements the Smallest of Maximum (SOM) method. It finds the smallest x-value that corresponds to the maximum membership degree.
+Finds max_mu and x_at_max just like MOM.
+np.min(x_at_max): Returns the minimum value among the x-values found on the plateau [40, 60], which is 40.
+Includes a check for max_mu == 0.
+<!-- end list -->
+
+Python
+
+def largest_of_maximum_defuzz(x_values, y_values):
+    """
+    Calculates the crisp value using the Largest of Maximum (LOM) method.
+    Takes the largest x-value that has the maximum membership degree.
+    """
+    max_mu = np.max(y_values)
+
+    if max_mu == 0:
+        print("Warning: Maximum membership is zero. LOM is undefined.")
+        return 0 # Handle empty set
+
+    x_at_max = x_values[y_values == max_mu]
+
+    # Return the maximum of these x values (for the trapezoid, this is the end of the plateau)
+    return np.max(x_at_max)
+largest_of_maximum_defuzz(x_values, y_values):
+Implements the Largest of Maximum (LOM) method. It finds the largest x-value that corresponds to the maximum membership degree.
+Finds max_mu and x_at_max just like MOM.
+np.max(x_at_max): Returns the maximum value among the x-values found on the plateau [40, 60], which is 60.
+Includes a check for max_mu == 0.
+<!-- end list -->
+
+Python
+
+# --- 4. Execute and Compare ---
+
+if __name__ == "__main__":
+    print("Universe of Discourse defined from", universe.min(), "to", universe.max(), "with step", universe[1]-universe[0])
+    print("Using a Trapezoidal Fuzzy Set defined by points:", trap_params)
+    # print("Sample Aggregated Fuzzy Set Values:", aggregated_mf_values) # Uncomment to see the values
+
+    # Dictionary to store the results from our custom functions
+    custom_results = {}
+
+    print("\nCalculating Crisp Values using Custom Functions:")
+
+    custom_results['centroid'] = centroid_defuzz(universe, aggregated_mf_values)
+    print(f"  - CENTROID (COA): {custom_results['centroid']:.2f}")
+
+    custom_results['bisector'] = bisector_defuzz(universe, aggregated_mf_values)
+    print(f"  - BISECTOR (BOA): {custom_results['bisector']:.2f}")
+
+    custom_results['mom'] = mean_of_maximum_defuzz(universe, aggregated_mf_values)
+    print(f"  - MEAN OF MAXIMUM (MOM): {custom_results['mom']:.2f}")
+
+    custom_results['som'] = smallest_of_maximum_defuzz(universe, aggregated_mf_values)
+    print(f"  - SMALLEST OF MAXIMUM (SOM): {custom_results['som']:.2f}")
+
+    custom_results['lom'] = largest_of_maximum_defuzz(universe, aggregated_mf_values)
+    print(f"  - LARGEST OF MAXIMUM (LOM): {custom_results['lom']:.2f}")
+Execution Block (if __name__ == "__main__":):
+This standard Python construct ensures the code inside it runs only when the script is executed directly (not when imported as a module).
+It first prints information about the defined universe and the parameters of the trapezoidal shape being used.
+It creates an empty dictionary custom_results to store the crisp values calculated by our manual functions.
+It calls each of the manual defuzzification functions, passing the universe (x-values) and the aggregated_mf_values (y-values).
+The result from each function is stored in the custom_results dictionary using the method name as the key.
+Finally, it prints the calculated crisp value for each method, formatted to two decimal places.
+<!-- end list -->
+
+Python
+
+# --- 5. Visualize the Results ---
+
+    plt.figure(figsize=(12, 7))
+
+    # Plot the aggregated fuzzy set (the trapezoid)
+    plt.plot(universe, aggregated_mf_values, label='Trapezoidal Fuzzy Set', color='blue', linewidth=2)
+
+    # Plot a vertical line for each defuzzified crisp value
+    colors = ['red', 'green', 'purple', 'orange', 'brown']
+    linestyles = ['--', '-.', ':', '--', '-']
+
+    # Ensure keys are in a consistent order for plotting colors/styles
+    method_order = ['centroid', 'bisector', 'mom', 'som', 'lom']
+
+    for i, method in enumerate(method_order):
+        if method in custom_results:
+             value = custom_results[method]
+             plt.axvline(x=value, color=colors[i], linestyle=linestyles[i],
+                         label=f'{method.upper()}: {value:.2f}')
+
+
+    # Add plot enhancements
+    plt.title('Comparison of Defuzzification Methods on a Trapezoidal Shape')
+    plt.xlabel('Output Variable Value (Universe of Discourse)')
+    plt.ylabel('Membership Degree')
+    plt.legend()
+    plt.grid(True, linestyle='--', alpha=0.6)
+    plt.ylim(-0.05, 1.05) # Extend y-axis slightly for better visualization
+    plt.xlim(universe.min(), universe.max()) # Set x-axis limits
+
+    plt.show()
+Visualization:
+plt.figure(...): Creates a new figure for plotting.
+plt.plot(universe, aggregated_mf_values, ...): Plots the trapezoidal membership function itself, with universe on the x-axis and aggregated_mf_values (membership degrees) on the y-axis.
+The for loop iterates through the results stored in custom_results.
+plt.axvline(x=value, ...): For each defuzzification method's result (value), a vertical line is drawn on the plot at that x-coordinate. This visually shows where each method's crisp output falls on the universe of discourse relative to the shape of the fuzzy set. Different colors and line styles are used for each method, and a label is added indicating the method and its value.
+The remaining lines add standard plot elements: a title, labels for the x and y axes, a legend to identify the vertical lines, a grid, and appropriate limits for the axes.
+plt.show(): Displays the generated plot.

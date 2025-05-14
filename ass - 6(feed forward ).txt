@@ -1,0 +1,490 @@
+# -*- coding: utf-8 -*-
+"""
+Soft Computing Practical: FFNN with Different Optimizers
+
+Aim: Build a simple feed forward neural network to classify the Iris dataset
+     and perform regression on California Housing, comparing different optimizers.
+
+Program: Build Feedforward Neural Network models for classification and regression,
+         using two different datasets. Apply different optimization algorithms (SGD, Adam, RMSprop).
+         Evaluate performance using accuracy (classification) and MSE (regression).
+         Plot training loss and validation metrics over iterations.
+"""
+
+# Import necessary libraries
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from sklearn.datasets import make_blobs, load_iris, fetch_california_housing
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import accuracy_score, mean_squared_error
+from sklearn.neural_network import MLPClassifier, MLPRegressor
+
+
+print("Loading and preparing datasets...")
+# 1. Classification Task (Iris Dataset)
+# Load and preprocess Iris Dataset
+iris = load_iris()
+X_iris, y_iris = iris.data, iris.target
+
+# Train-test split
+X_train_iris, X_test_iris, y_train_iris, y_test_iris = train_test_split(
+    X_iris, y_iris, test_size=0.2, random_state=42
+)
+
+# Standardize the features
+# Scaling is important for neural networks
+scaler_iris = StandardScaler()
+X_train_iris_scaled = scaler_iris.fit_transform(X_train_iris)
+X_test_iris_scaled = scaler_iris.transform(X_test_iris)
+
+print("Iris dataset prepared.")
+
+
+# 2. Regression Task (California Housing Dataset)
+# Load and preprocess California Housing Dataset
+california_housing = fetch_california_housing()
+X_cal, y_cal = california_housing.data, california_housing.target
+
+# Train-test split
+X_train_cal, X_test_cal, y_train_cal, y_test_cal = train_test_split(
+    X_cal, y_cal, test_size=0.2, random_state=42
+)
+
+# Standardize the features
+scaler_cal = StandardScaler()
+X_train_cal_scaled = scaler_cal.fit_transform(X_train_cal)
+X_test_cal_scaled = scaler_cal.transform(X_test_cal)
+
+print("California housing dataset prepared.")
+
+
+# 3. Define Optimizers and Parameters
+# Using scikit-learn's MLPClassifier and MLPRegressor which support different optimizers
+# Only 'adam', 'sgd', and 'lbfgs' are supported by scikit-learn
+optimizer_names = ['adam', 'sgd', 'lbfgs']
+# Define different learning rates to try for each optimizer
+learning_rates = [0.001, 0.01, 0.0001] # Example rates, you might need to tune
+
+# Store results for later plotting and comparison
+history_dict_cls = {} # Stores results for classification
+history_dict_reg = {} # Stores results for regression
+
+print("\nTraining classification models...")
+# 4. Classification with Different Optimizers
+# Using MLPClassifier from sklearn.neural_network
+
+for name in optimizer_names:
+    for lr in learning_rates:
+        print(f"  Training MLPClassifier with Optimizer: {name}, Learning Rate: {lr}")
+
+        # Define the MLPClassifier model
+        # hidden_layer_sizes=(10, 5) means two hidden layers with 10 and 5 neurons respectively
+        # activation='relu' is a common activation function
+        # solver=name sets the optimization algorithm
+        # learning_rate_init=lr sets the initial learning rate
+        # max_iter is set higher to give optimizers more time to converge
+        # random_state for reproducibility
+        mlp_cls = MLPClassifier(hidden_layer_sizes=(10, 5), # Similar to your Keras model structure hint
+                                activation='relu',
+                                solver=name,
+                                learning_rate_init=lr,
+                                max_iter=500, # Increased iterations
+                                random_state=42,
+                                # Setting verbose=True can show training progress
+                                # verbose=True,
+                                # warm_start=True # Can be used for iterative training
+                                )
+
+        # Train the model
+        # scikit-learn automatically handles backpropagation internally during fit
+        mlp_cls.fit(X_train_iris_scaled, y_train_iris)
+
+        # Set predictions and calculate accuracy on test set
+        y_pred_iris = mlp_cls.predict(X_test_iris_scaled)
+        accuracy_iris = accuracy_score(y_test_iris, y_pred_iris)
+
+        # Store the data for plotting and comparison
+        # Store training loss curve
+        # Store validation accuracy at the end of training
+        # Store also validation accuracy at each step if possible (MLPClassifier doesn't expose this directly)
+        # Let's store final test accuracy and training loss curve
+        key = f"{name}_lr{lr}"
+        history_dict_cls[key] = {
+            'final_accuracy': accuracy_iris,
+            'train_loss_curve': getattr(mlp_cls, 'loss_curve_', None) or getattr(mlp_cls, 'loss_curve', None), # handle both possible attributes
+            # validation accuracy history is not directly available per iteration in scikit-learn's MLP
+            # You'd need a custom loop for that or use libraries like Keras/TensorFlow/PyTorch
+            # For this practical, plotting train_loss_curve is standard with sklean MLP
+            # We can also plot the FINAL accuracy comparison
+        }
+        print(f"    Final Test Accuracy: {accuracy_iris:.4f}")
+
+
+print("\nTraining regression models...")
+# 5. Regression with Different Optimizers
+# Using MLPRegressor from sklearn.neural_network
+
+for name in optimizer_names:
+     for lr in learning_rates:
+        print(f"  Training MLPRegressor with Optimizer: {name}, Learning Rate: {lr}")
+
+        # Define the MLPRegressor model
+        # hidden_layer_sizes=(50, 20) - Example layers/neurons
+        # activation='relu'
+        # solver=name sets the optimization algorithm
+        # learning_rate_init=lr sets the initial learning rate
+        # max_iter is set higher
+        # random_state for reproducibility
+        mlp_reg = MLPRegressor(hidden_layer_sizes=(50, 20),
+                               activation='relu',
+                               solver=name,
+                               learning_rate_init=lr,
+                               max_iter=500, # Increased iterations
+                               random_state=42,
+                               # Setting verbose=True can show training progress
+                               # verbose=True,
+                               # early_stopping=True, # Stop early if validation score doesn't improve
+                               validation_fraction=0.2 # Fraction of training data for validation score check (if early_stopping=True)
+                               )
+
+        # Train the model
+        # scikit-learn automatically handles backpropagation internally during fit
+        mlp_reg.fit(X_train_cal_scaled, y_train_cal)
+
+        # Get predictions and calculate MSE on test set
+        y_pred_cal = mlp_reg.predict(X_test_cal_scaled)
+        mse_cal = mean_squared_error(y_test_cal, y_pred_cal)
+
+        # Store the data for plotting and comparison
+        # Store training loss curve
+        # Store final test MSE
+        # Note: validation score history is automatically tracked if early_stopping=True,
+        # but we'll calculate test MSE at the end here for comparison.
+        key = f"{name}_lr{lr}"
+        history_dict_reg[key] = {
+            'final_mse': mse_cal,
+            'train_loss_curve': getattr(mlp_reg, 'loss_curve_', None) or getattr(mlp_reg, 'loss_curve', None), # handle both possible attributes
+            'validation_scores': getattr(mlp_reg, 'validation_scores_', None) if hasattr(mlp_reg, 'validation_scores_') else None
+        }
+        print(f"    Final Test MSE: {mse_cal:.4f}")
+
+
+print("\nPlotting results...")
+# 6. Plotting
+# Plot Final Classification Accuracy vs Optimizer/Learning Rate
+
+plt.figure(figsize=(10, 6))
+optimizers_lr_labels = list(history_dict_cls.keys())
+final_accuracies = [history_dict_cls[key]['final_accuracy'] for key in optimizers_lr_labels]
+
+# Plot final accuracy as a bar chart or simply points
+plt.bar(optimizers_lr_labels, final_accuracies, color=['skyblue', 'lightgreen', 'salmon', 'c', 'm', 'y', 'k', 'orange', 'purple'])
+plt.ylabel("Final Test Accuracy")
+plt.title("Classification Accuracy vs Optimizer and Learning Rate")
+plt.xticks(rotation=45, ha='right') # Rotate labels for readability
+plt.tight_layout()
+plt.grid(axis='y', linestyle='--', alpha=0.6)
+plt.show()
+
+
+# Plot Classification training loss over iterations
+plt.figure(figsize=(10, 6))
+for key, history in history_dict_cls.items():
+    if history['train_loss_curve'] is not None:
+        plt.plot(history['train_loss_curve'], label=key)
+
+plt.title("Classification Training Loss over Iterations")
+plt.xlabel("Iteration")
+plt.ylabel("Loss")
+plt.legend()
+plt.grid(True, linestyle='--', alpha=0.6)
+plt.show()
+
+
+# Plot Regression validation MSE over iterations (if validation_scores_ was captured)
+# Note: validation_scores_ is populated if early_stopping=True
+# In this code, early_stopping is commented out by default.
+# If you enable early_stopping=True in MLPRegressor, this plot will show validation MSE history.
+# Otherwise, it will show nothing or handle None. Let's plot train loss history for regression instead for sure.
+plt.figure(figsize=(10, 6))
+for key, history in history_dict_reg.items():
+     if history['train_loss_curve'] is not None:
+         plt.plot(history['train_loss_curve'], label=key) # Plotting train loss for regression
+
+plt.title("Regression Training Loss over Iterations") # Updated title
+plt.xlabel("Iteration")
+plt.ylabel("Loss") # Updated label
+plt.legend()
+plt.grid(True, linestyle='--', alpha=0.6)
+plt.show()
+
+# You could add plots comparing predictions with actual values here if needed,
+# e.g., scatter plot of y_test vs y_pred for regression, or confusion matrix for classification.
+
+print("\nAnalysis complete!")
+
+
+--------------------------------------------------------------------------------------------------------------
+
+Header and Imports:
+The header comments explain the practical's aim and the program's scope: building FFNNs for classification and regression, using two datasets, comparing optimizers (SGD, Adam, RMSprop - note: the code uses 'lbfgs' instead of 'RMSprop' as specified in the comments and the optimizer_names list), evaluating performance with accuracy/MSE, and plotting training progress.
+import numpy as np: Imports the NumPy library for numerical operations, which is used extensively in data handling and calculations.
+import pandas as pd: Imports the pandas library, typically used for data manipulation and analysis (though not heavily used in this specific script beyond potentially displaying data, if needed).
+import matplotlib.pyplot as plt: Imports the Matplotlib library's plotting module, used to create static visualizations (the plots comparing optimizer performance).
+from sklearn.datasets import ...: Imports functions from scikit-learn to easily load or generate standard datasets: make_blobs (for synthetic clustering data, though not used in this specific script version), load_iris (for classification), and Workspace_california_housing (for regression).
+from sklearn.model_selection import train_test_split: Imports the function to split datasets into training and testing subsets.
+from sklearn.preprocessing import StandardScaler: Imports the class for standardizing features (scaling data).
+from sklearn.metrics import accuracy_score, mean_squared_error: Imports functions to evaluate model performance: accuracy_score for classification and mean_squared_error for regression.
+from sklearn.neural_network import MLPClassifier, MLPRegressor: Imports the core classes from scikit-learn that implement Feedforward Neural Networks (Multi-Layer Perceptrons) for classification (MLPClassifier) and regression (MLPRegressor). These classes handle the network architecture, forward pass, loss calculation, backpropagation, and weight updates internally.
+<!-- end list -->
+
+Python
+
+print("Loading and preparing datasets...")
+# 1. Classification Task (Iris Dataset)
+# Load and preprocess Iris Dataset
+iris = load_iris()
+X_iris, y_iris = iris.data, iris.target
+
+# Train-test split
+X_train_iris, X_test_iris, y_train_iris, y_test_iris = train_test_split(
+    X_iris, y_iris, test_size=0.2, random_state=42
+)
+
+# Standardize the features
+# Scaling is important for neural networks
+scaler_iris = StandardScaler()
+X_train_iris_scaled = scaler_iris.fit_transform(X_train_iris)
+X_test_iris_scaled = scaler_iris.transform(X_test_iris)
+
+print("Iris dataset prepared.")
+
+
+# 2. Regression Task (California Housing Dataset)
+# Load and preprocess California Housing Dataset
+california_housing = fetch_california_housing()
+X_cal, y_cal = california_housing.data, california_housing.target
+
+# Train-test split
+X_train_cal, X_test_cal, y_train_cal, y_test_cal = train_test_split(
+    X_cal, y_cal, test_size=0.2, random_state=42
+)
+
+# Standardize the features
+scaler_cal = StandardScaler()
+X_train_cal_scaled = scaler_cal.fit_transform(X_train_cal)
+X_test_cal_scaled = scaler_cal.transform(X_test_cal)
+
+print("California housing dataset prepared.")
+Data Loading and Preparation:
+Classification Data (Iris):
+load_iris(): Fetches the Iris dataset. X_iris gets the features (measurements), y_iris gets the target species labels (0, 1, or 2).
+train_test_split(...): Divides the Iris features and labels into training sets (80% of data) and testing sets (20% of data, specified by test_size=0.2). random_state=42 ensures that the split is the same every time you run the script, making results reproducible. X_train_iris, y_train_iris are for training; X_test_iris, y_test_iris are for evaluating the trained model's performance on data it hasn't seen.
+StandardScaler(): Creates a scaler object. Standardizing features is crucial for many machine learning algorithms, especially neural networks, because they are sensitive to the scale and distribution of input data.
+scaler_iris.fit_transform(X_train_iris): Learns the mean and standard deviation only from the training data (.fit()) and then applies the scaling transformation (.transform()) to the training data.
+scaler_iris.transform(X_test_iris): Applies the same scaling learned from the training data to the test data. It's important not to fit the scaler on the test data to avoid "data leakage". The resulting scaled data (X_train_iris_scaled, X_test_iris_scaled) has features with a mean close to 0 and standard deviation close to 1.
+Regression Data (California Housing):
+Workspace_california_housing(): Loads the California Housing dataset, commonly used for predicting housing values.
+The data splitting and standardization process is identical to the Iris dataset, preparing X_train_cal_scaled, X_test_cal_scaled, y_train_cal, and y_test_cal for the regression task.
+<!-- end list -->
+
+Python
+
+# 3. Define Optimizers and Parameters
+# Using scikit-learn's MLPClassifier and MLPRegressor which support different optimizers
+# Only 'adam', 'sgd', and 'lbfgs' are supported by scikit-learn
+optimizer_names = ['adam', 'sgd', 'lbfgs']
+# Define different learning rates to try for each optimizer
+learning_rates = [0.001, 0.01, 0.0001] # Example rates, you might need to tune
+
+# Store results for later plotting and comparison
+history_dict_cls = {} # Stores results for classification
+history_dict_reg = {} # Stores results for regression
+Define Optimizers and Parameters:
+optimizer_names = ['adam', 'sgd', 'lbfgs']: This list specifies the optimization algorithms that will be compared. These are supported by MLPClassifier and MLPRegressor.
+'adam': Adaptive Moment Estimation.
+'sgd': Stochastic Gradient Descent.
+'lbfgs': Limited-memory Broyden–Fletcher–Goldfarb–Shanno. Note: The program description mentioned 'RMSprop', but the code uses 'lbfgs' instead. 'lbfgs' is different from SGD/Adam/RMSprop; it's a quasi-Newton method that works well for smaller datasets but is computationally more expensive for large ones.
+learning_rates = [0.001, 0.01, 0.0001]: A list of initial learning rates. The script will train models with each of these learning rates for every optimizer.
+history_dict_cls, history_dict_reg: Empty dictionaries are initialized to store the training outcomes for each optimizer and learning rate combination (for classification and regression, respectively).
+<!-- end list -->
+
+Python
+
+print("\nTraining classification models...")
+# 4. Classification with Different Optimizers
+# Using MLPClassifier from sklearn.neural_network
+
+for name in optimizer_names:
+    for lr in learning_rates:
+        print(f"  Training MLPClassifier with Optimizer: {name}, Learning Rate: {lr}")
+
+        # Define the MLPClassifier model
+        # hidden_layer_sizes=(10, 5) means two hidden layers with 10 and 5 neurons respectively
+        # activation='relu' is a common activation function
+        # solver=name sets the optimization algorithm
+        # learning_rate_init=lr sets the initial learning rate
+        # max_iter is set higher to give optimizers more time to converge
+        # random_state for reproducibility
+        mlp_cls = MLPClassifier(hidden_layer_sizes=(10, 5), # Defines the structure of the hidden layers
+                                activation='relu',      # Activation function for hidden layers
+                                solver=name,            # The optimizer algorithm for this model instance
+                                learning_rate_init=lr,  # The initial learning rate
+                                max_iter=500,           # Number of epochs (passes over the training data)
+                                random_state=42         # For reproducible weight initialization
+                                )
+
+        # Train the model
+        # scikit-learn automatically handles backpropagation internally during fit
+        mlp_cls.fit(X_train_iris_scaled, y_train_iris)
+
+        # Set predictions and calculate accuracy on test set
+        y_pred_iris = mlp_cls.predict(X_test_iris_scaled)
+        accuracy_iris = accuracy_score(y_test_iris, y_pred_iris)
+
+        # Store the data for plotting and comparison
+        # Store training loss curve
+        # Store final test accuracy
+        key = f"{name}_lr{lr}" # Creates a unique key for this combination
+        history_dict_cls[key] = {
+            'final_accuracy': accuracy_iris,
+            # Retrieves the training loss history recorded by scikit-learn
+            # Handles potential attribute name differences ('loss_curve_' or 'loss_curve')
+            'train_loss_curve': getattr(mlp_cls, 'loss_curve_', None) or getattr(mlp_cls, 'loss_curve', None),
+        }
+        print(f"    Final Test Accuracy: {accuracy_iris:.4f}")
+Classification with Different Optimizers:
+This section iterates through each optimizer name and each learning rate defined earlier.
+For each combination, it:
+Creates an MLPClassifier object. This is the feedforward neural network model for classification.
+Configures the network architecture with two hidden layers (10 neurons then 5 neurons) using hidden_layer_sizes=(10, 5). Uses ReLU activation.
+Sets the solver (optimizer) and learning_rate_init for this specific model instance based on the loop variables.
+Sets max_iter to 500, meaning the training process will run for up to 500 epochs.
+mlp_cls.fit(X_train_iris_scaled, y_train_iris): This is the core training step. The fit method internally executes the forward pass (calculates predictions), computes the loss (error between predictions and true labels), performs backpropagation (calculates gradients of the loss with respect to each weight and bias in the network), and then uses the specified solver (optimizer) and learning rate to update the network's weights and biases to reduce the loss. This process repeats for max_iter epochs or until convergence.
+y_pred_iris = mlp_cls.predict(X_test_iris_scaled): After training, the predict method uses the learned weights to make predictions on the unseen test data. For a classifier, this outputs the predicted class label for each test sample.
+accuracy_iris = accuracy_score(y_test_iris, y_pred_iris): Calculates the accuracy metric by comparing the predicted labels with the true labels of the test set. Accuracy is the proportion of correctly classified samples.
+The final_accuracy and the train_loss_curve_ (or loss_curve, which is an attribute of the fitted MLPClassifier containing the training loss value after each iteration) are stored in the history_dict_cls dictionary using a unique key derived from the optimizer name and learning rate. This collects the results for plotting later.
+<!-- end list -->
+
+Python
+
+print("\nTraining regression models...")
+# 5. Regression with Different Optimizers
+# Using MLPRegressor from sklearn.neural_network
+
+for name in optimizer_names:
+     for lr in learning_rates:
+        print(f"  Training MLPRegressor with Optimizer: {name}, Learning Rate: {lr}")
+
+        # Define the MLPRegressor model
+        # hidden_layer_sizes=(50, 20) - Example layers/neurons
+        # activation='relu'
+        # solver=name sets the optimization algorithm
+        # learning_rate_init=lr sets the initial learning rate
+        # max_iter is set higher
+        # random_state for reproducibility
+        mlp_reg = MLPRegressor(hidden_layer_sizes=(50, 20), # Example network structure for regression
+                               activation='relu',      # Activation function
+                               solver=name,            # Optimizer
+                               learning_rate_init=lr,  # Initial learning rate
+                               max_iter=500,           # Number of epochs
+                               random_state=42,        # For reproducible initialization
+                               # early_stopping=True,  # Optional: Stop early if validation score doesn't improve
+                               validation_fraction=0.2 # Fraction of training data for validation check
+                               )
+
+        # Train the model
+        # scikit-learn automatically handles backpropagation internally during fit
+        mlp_reg.fit(X_train_cal_scaled, y_train_cal)
+
+        # Get predictions and calculate MSE on test set
+        y_pred_cal = mlp_reg.predict(X_test_cal_scaled)
+        mse_cal = mean_squared_error(y_test_cal, y_pred_cal)
+
+        # Store the data for plotting and comparison
+        # Store training loss curve
+        # Store final test MSE
+        # Note: validation score history is automatically tracked if early_stopping=True,
+        # but we'll calculate test MSE at the end here for comparison.
+        key = f"{name}_lr{lr}"
+        history_dict_reg[key] = {
+            'final_mse': mse_cal,
+            # Retrieves the training loss history
+            'train_loss_curve': getattr(mlp_reg, 'loss_curve_', None) or getattr(mlp_reg, 'loss_curve', None),
+            # Retrieves validation score history if early_stopping was True
+            'validation_scores': getattr(mlp_reg, 'validation_scores_', None) if hasattr(mlp_reg, 'validation_scores_') else None
+        }
+        print(f"    Final Test MSE: {mse_cal:.4f}")
+Regression with Different Optimizers:
+This section mirrors the classification section but is adapted for a regression task using the California Housing dataset.
+It loops through the same optimizers and learning rates.
+mlp_reg = MLPRegressor(...): Creates an MLPRegressor instance. The hidden layer sizes are different here ((50, 20)), representing a different network architecture chosen for this task. The solver, learning_rate_init, max_iter, and random_state are set in the same way.
+mlp_reg.fit(X_train_cal_scaled, y_train_cal): Trains the regression model on the scaled California Housing training data. Backpropagation and weight updates occur internally to minimize the regression loss (mean squared error by default).
+y_pred_cal = mlp_reg.predict(X_test_cal_scaled): Makes numerical predictions (estimated housing values) on the test data.
+mse_cal = mean_squared_error(y_test_cal, y_pred_cal): Calculates the Mean Squared Error (MSE) between the predicted values and the true values in the test set. MSE is a standard metric for regression, indicating the average squared difference between predictions and actuals.
+The final_mse, the train_loss_curve_ (training loss history), and potentially validation_scores_ (if early_stopping=True was used) are stored in the history_dict_reg dictionary.
+<!-- end list -->
+
+Python
+
+print("\nPlotting results...")
+# 6. Plotting
+# Plot Final Classification Accuracy vs Optimizer/Learning Rate
+
+plt.figure(figsize=(10, 6)) # Create a figure for the plot
+optimizers_lr_labels = list(history_dict_cls.keys()) # Get labels like 'adam_lr0.001'
+final_accuracies = [history_dict_cls[key]['final_accuracy'] for key in optimizers_lr_labels] # Extract final accuracies
+
+# Plot final accuracy as a bar chart
+plt.bar(optimizers_lr_labels, final_accuracies, color=['skyblue', 'lightgreen', 'salmon', 'c', 'm', 'y', 'k', 'orange', 'purple'])
+plt.ylabel("Final Test Accuracy") # Label the y-axis
+plt.title("Classification Accuracy vs Optimizer and Learning Rate") # Add title
+plt.xticks(rotation=45, ha='right') # Rotate x-axis labels for readability
+plt.tight_layout() # Adjust layout
+plt.grid(axis='y', linestyle='--', alpha=0.6) # Add a horizontal grid
+plt.show() # Display the plot
+
+
+# Plot Classification training loss over iterations
+plt.figure(figsize=(10, 6)) # Create a new figure
+for key, history in history_dict_cls.items(): # Loop through results for each combination
+    if history['train_loss_curve'] is not None: # Check if loss history exists
+        plt.plot(history['train_loss_curve'], label=key) # Plot loss curve over iterations
+
+plt.title("Classification Training Loss over Iterations") # Add title
+plt.xlabel("Iteration") # Label x-axis
+plt.ylabel("Loss") # Label y-axis
+plt.legend() # Show legend to identify lines
+plt.grid(True, linestyle='--', alpha=0.6) # Add a grid
+plt.show() # Display the plot
+
+
+# Plot Regression validation MSE over iterations (if validation_scores_ was captured)
+# Note: validation_scores_ is populated if early_stopping=True
+# In this code, early_stopping is commented out by default.
+# If you enable early_stopping=True in MLPRegressor, this plot will show validation MSE history.
+# Otherwise, it will show nothing or handle None. Let's plot train loss history for regression instead for sure.
+plt.figure(figsize=(10, 6)) # Create a new figure
+for key, history in history_dict_reg.items(): # Loop through results for each combination
+     if history['train_loss_curve'] is not None: # Check if loss history exists
+         plt.plot(history['train_loss_curve'], label=key) # Plot training loss curve
+
+plt.title("Regression Training Loss over Iterations") # Updated title
+plt.xlabel("Iteration") # Label x-axis
+plt.ylabel("Loss") # Label y-axis
+plt.legend() # Show legend
+plt.grid(True, linestyle='--', alpha=0.6) # Add grid
+plt.show() # Display the plot
+
+# You could add plots comparing predictions with actual values here if needed,
+# e.g., scatter plot of y_test vs y_pred for regression, or confusion matrix for classification.
+
+print("\nAnalysis complete!")
+Plotting Results:
+This section uses Matplotlib to generate plots summarizing the training results.
+Final Classification Accuracy: A bar chart is created showing the final test accuracy achieved by each optimizer/learning rate combination for the classification task. This makes it easy to visually compare which setup yielded the highest accuracy.
+Classification Training Loss: A line plot is generated showing how the training loss changed over the 500 iterations for each optimizer/learning rate combination during classification training. This helps visualize convergence speed and stability.
+Regression Training Loss: Similar to the classification loss plot, this plots the training loss history for each regression model. This shows how well each optimizer/learning rate combination reduced the MSE during training on the regression task. (Note: Although the code comments mention validation MSE, as written and by default, it plots the training loss history using loss_curve_ because validation_scores_ requires early_stopping=True which is commented out).
+Each plot includes titles, axis labels, a legend to identify the different lines (optimizers/learning rates), and a grid for readability. plt.show() displays each plot.

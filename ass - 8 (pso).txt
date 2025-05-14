@@ -1,0 +1,254 @@
+import numpy as np
+import random
+import matplotlib.pyplot as plt
+
+# Define the Rosenbrock Function
+def rosenbrock(x, y):
+    """
+    The Rosenbrock function, a common optimization test function.
+    Has a global minimum of 0 at (a, a^2). Typically a=1, so minimum is at (1, 1).
+    """
+    a = 1
+    b = 100
+    return (a - x)**2 + b * (y - x**2)**2
+
+# Particle Swarm Optimization (PSO) Algorithm
+class PSO:
+    def __init__(self, num_particles, max_iter, w, c1, c2, bounds):
+        """
+        Initializes the PSO algorithm.
+
+        Args:
+            num_particles (int): The number of particles in the swarm.
+            max_iter (int): The maximum number of iterations.
+            w (float): Inertia weight.
+            c1 (float): Cognitive coefficient (influence of personal best).
+            c2 (float): Social coefficient (influence of global best).
+            bounds (tuple): A tuple of tuples defining the search space bounds (e.g., ((-5, 5), (-5, 5))).
+                           Assuming 2D optimization (x, y).
+        """
+        self.num_particles = num_particles
+        self.max_iter = max_iter
+        self.w = w  # Inertia weight
+        self.c1 = c1 # Cognitive coefficient
+        self.c2 = c2 # Social coefficient
+        self.bounds = bounds # Search bounds for x and y
+        self.dimensions = len(bounds) # Assuming dimensions based on bounds
+
+        # Initialize particles (positions and velocities)
+        # Positions are initialized randomly within the search bounds
+        self.positions = np.random.uniform(low=[b[0] for b in self.bounds],
+                                           high=[b[1] for b in self.bounds],
+                                           size=(self.num_particles, self.dimensions))
+
+        # Velocities are typically initialized randomly within a certain range, e.g., [-1, 1]
+        self.velocities = np.random.uniform(-1, 1, size=(self.num_particles, self.dimensions))
+
+        # Initialize personal best positions and values
+        self.pbest_positions = np.copy(self.positions)
+        # Evaluate the initial fitness of each particle's position
+        self.pbest_values = np.array([rosenbrock(p[0], p[1]) for p in self.positions])
+
+        # Initialize global best position and value
+        # Find the index of the particle with the best initial fitness
+        gbest_index = np.argmin(self.pbest_values)
+        self.gbest_position = np.copy(self.pbest_positions[gbest_index])
+        self.gbest_value = self.pbest_values[gbest_index]
+
+    def update_velocity(self, i):
+        """
+        Updates the velocity of the i-th particle based on the PSO velocity update formula.
+        """
+        r1, r2 = np.random.rand(2) # Random numbers for cognitive and social components
+
+        # PSO Velocity Update Formula:
+        # v(t+1) = w*v(t) + c1*r1*(pbest(i) - x(t)) + c2*r2*(gbest - x(t))
+        cognitive_component = self.c1 * r1 * (self.pbest_positions[i] - self.positions[i])
+        social_component = self.c2 * r2 * (self.gbest_position - self.positions[i])
+
+        self.velocities[i] = self.w * self.velocities[i] + cognitive_component + social_component
+
+    def update_position(self, i):
+        """
+        Updates the position of the i-th particle based on its velocity.
+        Ensures the particle stays within the search bounds.
+        """
+        self.positions[i] += self.velocities[i]
+
+        # Ensure particles stay within bounds using clipping
+        for d in range(self.dimensions):
+            self.positions[i, d] = np.clip(self.positions[i, d], self.bounds[d][0], self.bounds[d][1])
+
+    def optimize(self):
+        """
+        Runs the main PSO optimization loop.
+        """
+        # Keep track of the global best value over iterations for plotting convergence
+        history = [self.gbest_value]
+
+        for iteration in range(self.max_iter):
+            for i in range(self.num_particles):
+                # Evaluate the fitness of the current position
+                current_fitness = rosenbrock(self.positions[i, 0], self.positions[i, 1])
+
+                # Update personal best
+                if current_fitness < self.pbest_values[i]:
+                    self.pbest_values[i] = current_fitness
+                    self.pbest_positions[i] = self.positions[i]
+
+                # Update global best
+                if current_fitness < self.gbest_value:
+                    self.gbest_value = current_fitness
+                    self.gbest_position = self.positions[i]
+
+                # Update velocity and position
+                self.update_velocity(i)
+                self.update_position(i)
+
+            # Record the global best value for this iteration
+            history.append(self.gbest_value)
+            # Optional: Print progress
+            # if (iteration + 1) % 50 == 0 or iteration == 0:
+            #     print(f"Iteration {iteration+1}: Best Value = {self.gbest_value:.4f}")
+
+
+        return self.gbest_position, self.gbest_value, history # Return best position, value, and history
+
+# # Parameters
+num_particles = 30
+max_iter = 100
+w = 0.5  # Inertia weight
+c1 = 1.5 # Cognitive coefficient
+c2 = 1.5 # Social coefficient
+bounds = ((-5, 5), (-5, 5)) # Search space bounds for x and y
+
+# Run PSO
+pso = PSO(num_particles, max_iter, w, c1, c2, bounds)
+best_position, best_value, history = pso.optimize()
+
+# Output the result
+print(f"Optimal Position: {best_position}")
+print(f"Optimal Value: {best_value}")
+
+# Plotting the convergence
+plt.plot(range(len(history)), history)
+plt.xlabel('Iteration')
+plt.ylabel('Fitness (Value of Rosenbrock function)')
+plt.title('Convergence of PSO')
+plt.grid(True)
+plt.show()
+
+--------------------------------------------------------------------------------------------------------------
+
+numpy (np): Used for numerical operations, especially array handling for particle positions and velocities, and random number generation within specified ranges.
+random: Used for generating random numbers, particularly for the random factors r1 and r2 in the velocity update equation.
+matplotlib.pyplot (plt): Used for plotting the convergence of the optimization process.
+2. Rosenbrock Function:
+
+Python
+
+def rosenbrock(x, y):
+    """
+    The Rosenbrock function, a common optimization test function.
+    Has a global minimum of 0 at (a, a^2). Typically a=1, so minimum is at (1, 1).
+    """
+    a = 1
+    b = 100
+    return (a - x)**2 + b * (y - x**2)**2
+This function defines the objective function we want to minimize. The Rosenbrock function is a non-convex function used as a performance test problem for optimization algorithms. It has a global minimum of 0 at the point (a,a 
+2
+ ), which with the standard parameters a=1 and b=100, is at the point (1, 1).
+3. PSO Class:
+
+The core of the algorithm is encapsulated in the PSO class.
+
+__init__(self, num_particles, max_iter, w, c1, c2, bounds):
+
+This is the constructor of the PSO class. It initializes the parameters and the state of the swarm.
+num_particles: The total number of particles in the swarm.
+max_iter: The maximum number of iterations (generations) the optimization will run for.
+w: Inertia weight. This controls how much the particle's previous velocity influences its current velocity. A higher w encourages exploration, while a lower w encourages exploitation.
+c1: Cognitive coefficient. This controls the influence of the particle's own personal best position (pbest) on its velocity. It represents the particle's "memory" of good solutions it has found individually.
+c2: Social coefficient. This controls the influence of the global best position (gbest) found by any particle in the swarm on the particle's velocity. It represents the swarm's collective knowledge.
+bounds: A tuple defining the search space boundaries for each dimension. For the 2D Rosenbrock function, it's ((min_x, max_x), (min_y, max_y)).
+self.dimensions: Infers the number of dimensions from the bounds provided.
+Particle Initialization:
+self.positions: A NumPy array of shape (num_particles, dimensions) storing the current position of each particle. Each particle's position is initialized randomly within the specified bounds.
+self.velocities: A NumPy array of the same shape, storing the current velocity of each particle in each dimension. Velocities are typically initialized randomly within a smaller range, often [-1, 1].
+Personal Best Initialization:
+self.pbest_positions: Stores the best position found so far by each individual particle. Initially, it's a copy of the starting positions.
+self.pbest_values: Stores the fitness (Rosenbrock value) at each particle's pbest_position. Initially, it's calculated by evaluating the Rosenbrock function at each particle's starting position.
+Global Best Initialization:
+self.gbest_position: Stores the overall best position found by any particle in the swarm so far. It's initialized to the pbest_position of the particle with the lowest initial Rosenbrock value.
+self.gbest_value: Stores the fitness (Rosenbrock value) at the gbest_position.
+update_velocity(self, i):
+
+This function calculates and updates the velocity of the i-th particle.
+r1, r2 = np.random.rand(2): Generates two random numbers between 0 and 1. These introduce stochasticity (randomness) into the velocity updates, allowing particles to explore the search space more broadly.
+The formula v(t+1) = w*v(t) + c1*r1*(pbest(i) - x(t)) + c2*r2*(gbest - x(t)) is implemented:
+self.w * self.velocities[i]: The inertia term, influencing the particle's movement based on its previous velocity.
+self.c1 * r1 * (self.pbest_positions[i] - self.positions[i]): The cognitive component. It pulls the particle towards its own personal best position. The random factor r1 scales this pull.
+self.c2 * r2 * (self.gbest_position - self.positions[i]): The social component. It pulls the particle towards the global best position found by the swarm. The random factor r2 scales this pull.
+These three components are added to get the new velocity for the particle.
+update_position(self, i):
+
+This function updates the position of the i-th particle based on its newly calculated velocity.
+self.positions[i] += self.velocities[i]: The new position is simply the old position plus the new velocity.
+Boundary Handling:
+The code then iterates through each dimension of the particle's position.
+np.clip(self.positions[i, d], self.bounds[d][0], self.bounds[d][1]): This is a NumPy function that restricts the value of self.positions[i, d] to be within the range defined by self.bounds[d][0] (minimum bound for dimension d) and self.bounds[d][1] (maximum bound). If the position goes outside the bounds after adding the velocity, it's "clipped" back to the boundary. This prevents particles from leaving the search space.
+optimize(self):
+
+This is the main loop of the PSO algorithm.
+history = [self.gbest_value]: Initializes a list to store the global best value found at the start and after each iteration.
+for iteration in range(self.max_iter):: The main loop runs for the specified number of iterations.
+for i in range(self.num_particles):: The inner loop iterates through each particle in the swarm.
+current_fitness = rosenbrock(self.positions[i, 0], self.positions[i, 1]): Evaluates the Rosenbrock function at the particle's current position to get its fitness.
+Update Personal Best:
+if current_fitness < self.pbest_values[i]:: If the current fitness is better (lower for minimization) than the particle's best fitness found so far...
+self.pbest_values[i] = current_fitness and self.pbest_positions[i] = self.positions[i]: Update the particle's personal best fitness and position.
+Update Global Best:
+if current_fitness < self.gbest_value:: If the current fitness is better than the overall global best fitness found so far...
+self.gbest_value = current_fitness and self.gbest_position = self.positions[i]: Update the overall global best fitness and position.
+self.update_velocity(i): Calls the function to calculate the new velocity for the particle.
+self.update_position(i): Calls the function to update the particle's position using the new velocity.
+history.append(self.gbest_value): After all particles have been updated in an iteration, the current global best value is recorded in the history.
+return self.gbest_position, self.gbest_value, history: After all iterations are complete, the function returns the final global best position, its corresponding value, and the history of global best values over iterations.
+4. Running the PSO:
+
+Python
+
+# # Parameters
+num_particles = 30
+max_iter = 100
+w = 0.5  # Inertia weight
+c1 = 1.5 # Cognitive coefficient
+c2 = 1.5 # Social coefficient
+bounds = ((-5, 5), (-5, 5)) # Search space bounds for x and y
+
+# Run PSO
+pso = PSO(num_particles, max_iter, w, c1, c2, bounds)
+best_position, best_value, history = pso.optimize()
+This section defines the parameters for the PSO run and then creates an instance of the PSO class, passing these parameters to the constructor.
+pso.optimize(): Calls the optimize method on the created PSO object, starting the optimization process. The results (best position, value, and history) are stored in variables.
+5. Outputting and Plotting Results:
+
+Python
+
+# Output the result
+print(f"Optimal Position: {best_position}")
+print(f"Optimal Value: {best_value}")
+
+# Plotting the convergence
+plt.plot(range(len(history)), history)
+plt.xlabel('Iteration')
+plt.ylabel('Fitness (Value of Rosenbrock function)')
+plt.title('Convergence of PSO')
+plt.grid(True)
+plt.show()
+Output: Prints the coordinates of the final best position found and the corresponding Rosenbrock function value at that position.
+Plotting:
+plt.plot(range(len(history)), history): Plots the history list. The x-axis represents the iteration number (from 0 to max_iter), and the y-axis represents the global best Rosenbrock value found up to that iteration. This plot shows how the algorithm converges towards a minimum value over time.
+plt.xlabel(...), plt.ylabel(...), plt.title(...): Sets labels and title for the plot.
+plt.grid(True): Adds a grid to the plot for better readability.
+plt.show(): Displays the generated plot.

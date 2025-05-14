@@ -1,0 +1,863 @@
+import numpy as np
+import random
+import matplotlib.pyplot as plt
+import heapq # For Dijkstra's algorithm
+
+# --- 1. Define the Pathfinding Problem (Graph) ---
+# Modified graph to introduce more alternative paths and complexity
+# This will allow ACO to explore and possibly find different paths than Dijkstra
+# and show more variation in convergence
+
+graph = {
+    0: [(1, 1), (2, 5), (3, 8)],
+    1: [(0, 1), (2, 1), (3, 2), (4, 7)],
+    2: [(0, 5), (1, 1), (3, 1), (4, 2), (5, 10)],
+    3: [(0, 8), (1, 2), (2, 1), (4, 1), (5, 3)],
+    4: [(1, 7), (2, 2), (3, 1), (5, 1)],
+    5: [(2, 10), (3, 3), (4, 1)]
+}
+nodes = list(graph.keys())
+num_nodes = len(nodes)
+
+# Define start and end nodes for the pathfinding task
+start_node = 0
+end_node = 5
+
+# --- 2. ACO Hyperparameters ---
+num_ants = 3        # Fewer ants for more randomness
+num_iterations = 100 # Fewer iterations for visible change
+rho = 0.5           # High evaporation for more exploration
+alpha = 0.7         # Lower pheromone influence
+beta = 4.0          # Higher heuristic influence
+Q = 2.0             # Lower pheromone deposit
+
+# --- 3. Initialize Pheromones and Heuristics ---
+# Pheromone trails: tau[i][j] represents the pheromone level on the edge from node i to node j.
+# Initialize uniformly with a small amount. A common heuristic is 1 / num_nodes or 1 / (average initial path length).
+initial_pheromone = 1.0 # A common initialization value
+
+# Initialize pheromone matrix (symmetric since graph edges are typically bidirectional in pathfinding ACO)
+pheromone = np.full((num_nodes, num_nodes), initial_pheromone, dtype=float)
+
+# Heuristic information: eta[i][j] = 1 / distance(i, j). Represents the attractiveness of an edge.
+# Use a large value (like infinity or a very large number) for non-existent edges to prevent ants from choosing them.
+heuristic = np.zeros((num_nodes, num_nodes), dtype=float)
+for u in graph:
+    for v, dist in graph[u]:
+        if dist > 0: # Avoid division by zero
+             heuristic[u][v] = 1.0 / dist
+             heuristic[v][u] = 1.0 / dist # Assuming undirected graph heuristic
+        else: # Handle zero distance or potential negative (though unlikely in standard TSP/pathfinding)
+             heuristic[u][v] = float('inf') # Very high desirability for dist 0
+             heuristic[v][u] = float('inf')
+
+
+# --- 4. Ant Movement Rule ---
+def get_next_node(current_node, visited):
+    """
+    Probabilistically selects the next node for an ant from current_node
+    based on pheromone and heuristic information.
+    """
+    possible_moves = []
+    probabilities = []
+
+    # Identify potential next nodes (neighbors not yet visited)
+    for neighbor, dist in graph.get(current_node, []):
+        if neighbor not in visited:
+            possible_moves.append(neighbor)
+
+    # If no valid moves, the ant is stuck
+    if not possible_moves:
+        return None
+
+    # Calculate the desirability (pheromone^alpha * heuristic^beta) for each possible move
+    desirabilities = []
+    for next_node in possible_moves:
+        tau = pheromone[current_node][next_node] # Pheromone
+        eta = heuristic[current_node][next_node] # Heuristic (1/distance)
+        desirability = (tau**alpha) * (eta**beta)
+        desirabilities.append(desirability)
+
+    total_desirability = sum(desirabilities)
+
+    # If total desirability is zero (e.g., all pheromones/heuristics are zero),
+    # choose randomly among possible moves to avoid division by zero and explore.
+    if total_desirability == 0:
+         probabilities = [1.0 / len(possible_moves)] * len(possible_moves)
+    else:
+        # Calculate normalized probabilities
+        probabilities = [d / total_desirability for d in desirabilities]
+
+    # Select the next node based on the calculated probabilities
+    next_node = random.choices(possible_moves, weights=probabilities, k=1)[0]
+
+    return next_node
+
+# --- 5. ACO Solution Construction for Path (Start to End) ---
+def construct_path(start, end):
+    """
+    Simulates a single ant constructing a path from the start node to the end node.
+    Returns the path (list of nodes) and its total distance.
+    If the ant gets stuck, returns None for path and infinity for distance.
+    """
+    current_node = start
+    path = [current_node]
+    visited = {current_node}
+    total_dist = 0
+
+    while current_node != end:
+        next_node = get_next_node(current_node, visited)
+
+        # Check if the ant got stuck (no valid next moves)
+        if next_node is None:
+            return None, float('inf') # Ant failed to reach the end
+
+        # Find the distance to the selected next node
+        dist_to_next = None
+        for neighbor, dist in graph.get(current_node, []):
+            if neighbor == next_node:
+                dist_to_next = dist
+                break # Found the distance
+
+        if dist_to_next is None:
+             # This case should ideally not happen if get_next_node selects a valid neighbor
+             # but added for robustness. Means the selected neighbor wasn't actually a neighbor.
+             return None, float('inf')
+
+        path.append(next_node)
+        visited.add(next_node)
+        total_dist += dist_to_next
+        current_node = next_node
+
+    # Ant successfully reached the end node
+    return path, total_dist
+
+# --- 6. Pheromone Update Mechanism ---
+def update_pheromones(all_ant_paths, global_best_path_info):
+    """
+    Updates pheromone trails based on ant paths and evaporation.
+    Applies evaporation globally and deposition based on successful ant paths.
+    Includes an elitist update for the global best path found so far.
+    """
+    global pheromone # We need to modify the global pheromone matrix
+
+    # Pheromone Evaporation: Reduce pheromone levels on all edges
+    pheromone *= (1 - rho)
+
+    # Pheromone Deposition by individual ants that completed a path
+    for path, dist in all_ant_paths:
+        if path is not None and dist != float('inf'): # Only deposit if the ant found a valid path
+            pheromone_deposit = Q / dist # Amount of pheromone to deposit
+            # Deposit pheromone along the edges of the path
+            for i in range(len(path) - 1):
+                u, v = path[i], path[i+1]
+                pheromone[u][v] += pheromone_deposit
+                pheromone[v][u] += pheromone_deposit # Symmetric update for undirected graph
+
+    # Elitist Pheromone Deposition (on the best path found globally across all iterations)
+    # This reinforces the best solution found so far.
+    global_best_path, global_best_dist = global_best_path_info
+    if global_best_path is not None and global_best_dist != float('inf'):
+        elitist_deposit = Q / global_best_dist # Amount of pheromone for the elitist path
+        # Deposit elitist pheromone along the edges of the global best path
+        for i in range(len(global_best_path) - 1):
+            u, v = global_best_path[i], global_best_path[i+1]
+            pheromone[u][v] += elitist_deposit
+            pheromone[v][u] += elitist_deposit # Symmetric update
+
+
+# --- 7. Run ACO ---
+def run_aco(start, end):
+    """
+    Executes the main loop of the Ant Colony Optimization algorithm
+    to find the shortest path from start to end.
+    """
+    global_best_path = None
+    global_best_dist = float('inf') # Initialize global best distance to infinity
+
+    best_dist_history = [] # To track the best distance found at the end of each iteration
+
+    for iteration in range(num_iterations):
+        # List to store paths found by all ants in the current iteration
+        all_ant_paths = []
+
+        # Ant construction phase
+        for ant_id in range(num_ants):
+            path, dist = construct_path(start, end)
+            all_ant_paths.append((path, dist))
+
+            # Update the best path found in the current iteration
+            if path is not None and dist < global_best_dist:
+                 global_best_dist = dist
+                 global_best_path = path
+
+        # Update pheromone trails after all ants have moved
+        update_pheromones(all_ant_paths, (global_best_path, global_best_dist))
+
+        # Record the global best distance after this iteration
+        best_dist_history.append(global_best_dist)
+
+        # Optional: Print progress of the best distance
+        # if (iteration + 1) % 10 == 0 or iteration == 1:
+        #     print(f"Iteration {iteration+1}: Global Best Distance = {global_best_dist:.3f}")
+
+    print("\nACO Simulation Finished.")
+    return global_best_path, global_best_dist, best_dist_history
+
+# --- 8. Dijkstra's Algorithm (for comparison) ---
+def dijkstra(graph, start, end):
+    """
+    Finds the shortest path from start to end using Dijkstra's algorithm.
+    Requires a graph represented as an adjacency list {node: [(neighbor, weight)]}.
+    Returns the path (list of nodes) and the total distance.
+    Returns None and float('inf') if the end is unreachable.
+    """
+    # dists: Dictionary to store the shortest distance found from start to each node.
+    # Initialize all distances to infinity except for the start node (distance 0).
+    dists = {node: float('inf') for node in graph}
+    dists[start] = 0
+
+    # previous: Dictionary to store the predecessor node on the shortest path from start.
+    # Used to reconstruct the path.
+    previous = {node: None for node in graph}
+
+    # Priority queue: Stores tuples of (distance, node).
+    # Automatically sorts by distance, allowing us to always process the node
+    # with the smallest known distance first.
+    pq = [(0, start)] # Start with the start node and distance 0 in the priority queue
+
+    while pq:
+        # Get the node with the smallest distance from the priority queue
+        current_dist, current_node = heapq.heappop(pq)
+
+        # If we have reached the end node, reconstruct the path
+        if current_node == end:
+            path = []
+            # Traverse back from the end node to the start using the 'previous' dictionary
+            while current_node is not None:
+                path.append(current_node)
+                current_node = previous[current_node]
+            # The path is built backwards, so reverse it
+            return path[::-1], dists[end]
+
+        # If the current distance extracted from the priority queue is greater
+        # than the already recorded shortest distance to this node, skip.
+        # This happens if we found a shorter path to this node earlier.
+        if current_dist > dists[current_node]:
+            continue
+
+        # Explore the neighbors of the current node
+        for neighbor, weight in graph.get(current_node, []):
+            # Calculate the distance to the neighbor through the current node
+            distance = current_dist + weight
+
+            # If this new path to the neighbor is shorter than the previously known shortest path
+            if distance < dists[neighbor]:
+                # Update the shortest distance to the neighbor
+                dists[neighbor] = distance
+                # Set the current node as the predecessor of the neighbor on the shortest path
+                previous[neighbor] = current_node
+                # Add or update the neighbor in the priority queue with the new shorter distance
+                heapq.heappush(pq, (distance, neighbor))
+
+    # If the loop finishes and the end node was not reached, it means the end is unreachable from the start.
+    return None, float('inf')
+
+
+# --- 9. Run Algorithms and Compare ---
+print(f"Starting ACO simulation for path from node {start_node} to {end_node}...")
+# Run the ACO algorithm
+aco_path, aco_dist, aco_history = run_aco(start_node, end_node)
+
+print(f"\nStarting Dijkstra's algorithm for path from node {start_node} to {end_node}...")
+# Run Dijkstra's algorithm for comparison (ground truth)
+dijkstra_path, dijkstra_dist = dijkstra(graph, start_node, end_node)
+
+print("\n--- Optimization Results Comparison ---")
+print(f"Problem: Find path from node {start_node} to node {end_node}")
+print(f"Graph: {graph}")
+print("-" * 30)
+print(f"ACO Result:")
+print(f"  Path: {aco_path}")
+print(f"  Distance: {aco_dist:.3f}") # Print with 3 decimal places for clarity
+print("-" * 30)
+print(f"Dijkstra Result (Optimal):")
+print(f"  Path: {dijkstra_path}")
+print(f"  Distance: {dijkstra_dist}")
+print("-" * 30)
+
+# Check if ACO found the optimal path (or a path with the optimal distance)
+if aco_dist == dijkstra_dist:
+    print("ACO found a path with the same distance as the optimal path.")
+elif aco_dist < dijkstra_dist:
+     print("Warning: ACO found a path shorter than Dijkstra's? Check graph or implementations.")
+else:
+    # Allow for small floating point inaccuracies in ACO distance calculation if needed
+    if abs(aco_dist - dijkstra_dist) < 1e-9:
+         print("ACO found a path with a distance very close to the optimal path (due to floating point arithmetic).")
+    else:
+        print(f"ACO found a path, but it is longer than the optimal path by {aco_dist - dijkstra_dist:.3f}.")
+        print("This is expected as ACO is a metaheuristic and doesn't guarantee optimality.")
+
+# --- 10. Plotting Convergence (ACO) ---
+plt.figure(figsize=(10, 5))
+plt.plot(range(len(aco_history)), aco_history)
+plt.xlabel("Iteration")
+plt.ylabel("Best Distance Found (Global Best)")
+plt.title("ACO Convergence for Shortest Path Problem")
+plt.grid(True)
+plt.show()
+
+# --- Optional: Plotting the Graph and Paths ---
+# Update node positions for visualization (spread out for clarity)
+pos = {
+    0: (0, 0),
+    1: (2, 2),
+    2: (4, 0),
+    3: (6, 2),
+    4: (8, 0),
+    5: (10, 1)
+}
+
+plt.figure(figsize=(10, 6))
+
+# Draw nodes
+for node, coords in pos.items():
+    plt.plot(coords[0], coords[1], 'o', markersize=10, color='skyblue', zorder=5) # zorder to be on top
+    plt.text(coords[0], coords[1] + 0.2, str(node), fontsize=12, ha='center')
+
+# Draw all edges in the graph faintly
+for u in graph:
+    for v, dist in graph[u]:
+        x_coords = [pos[u][0], pos[v][0]]
+        y_coords = [pos[u][1], pos[v][1]]
+        plt.plot(x_coords, y_coords, 'gray', linestyle='--', linewidth=0.7, alpha=0.6) # Faint dashed lines
+
+# Draw ACO Path
+if aco_path is not None and aco_dist != float('inf'):
+    aco_x = [pos[node][0] for node in aco_path]
+    aco_y = [pos[node][1] for node in aco_path]
+    plt.plot(aco_x, aco_y, 'b-', linewidth=2.5, label=f'ACO Path (Dist: {aco_dist:.2f})', zorder=2) # Solid blue line
+
+# Draw Dijkstra Path
+if dijkstra_path is not None and dijkstra_dist != float('inf'):
+    dij_x = [pos[node][0] for node in dijkstra_path]
+    dij_y = [pos[node][1] for node in dijkstra_path]
+    plt.plot(dij_x, dij_y, 'r--', linewidth=2.5, label=f'Dijkstra Path (Dist: {dijkstra_dist:.2f})', zorder=3) # Dashed red line
+
+plt.title('ACO vs Dijkstra Path Comparison')
+plt.xlabel('X Coordinate')
+plt.ylabel('Y Coordinate')
+plt.legend()
+plt.grid(False) # Hide grid for graph plot
+plt.axis('equal') # Equal scaling for x and y axes
+plt.axis('off') # Hide axes ticks and labels
+plt.show()
+
+
+--------------------------------------------------------------------------------------------------------------
+
+
+
+Okay, let's go through the provided Python code step by step and explain each part in detail. This script implements an Ant Colony Optimization (ACO) algorithm to find a path between a start and end node in a graph and compares its result to the guaranteed shortest path found by Dijkstra's algorithm.
+
+1. Imports:
+
+Python
+
+import numpy as np
+import random
+import matplotlib.pyplot as plt
+import heapq # For Dijkstra's algorithm
+import numpy as np: Imports the NumPy library, fundamental for numerical operations. It's used here for creating and manipulating arrays efficiently, specifically the pheromone and heuristic matrices. We use the alias np.
+import random: Imports Python's built-in random module, used for generating random numbers. This is crucial for the probabilistic nature of ACO, particularly when ants choose their next node based on probabilities and for initializing random aspects.
+import matplotlib.pyplot as plt: Imports the plotting module from Matplotlib. It's used to visualize the ACO algorithm's convergence (how the best path length improves over iterations) and to plot the graph with the paths found by ACO and Dijkstra. We use the alias plt.
+import heapq: Imports the heapq module, which provides an implementation of the heap queue algorithm, also known as the priority queue algorithm.1 This is specifically used in Dijkstra's algorithm to efficiently retrieve the node with the smallest current distance.   
+1.
+github.com
+github.com
+2. Define the Pathfinding Problem (Graph):
+
+Python
+
+# --- 1. Define the Pathfinding Problem (Graph) ---
+# Modified graph to introduce more alternative paths and complexity
+# This will allow ACO to explore and possibly find different paths than Dijkstra
+# and show more variation in convergence
+
+graph = {
+    0: [(1, 1), (2, 5), (3, 8)],
+    1: [(0, 1), (2, 1), (3, 2), (4, 7)],
+    2: [(0, 5), (1, 1), (3, 1), (4, 2), (5, 10)],
+    3: [(0, 8), (1, 2), (2, 1), (4, 1), (5, 3)],
+    4: [(1, 7), (2, 2), (3, 1), (5, 1)],
+    5: [(2, 10), (3, 3), (4, 1)]
+}
+nodes = list(graph.keys())
+num_nodes = len(nodes)
+
+# Define start and end nodes for the pathfinding task
+start_node = 0
+end_node = 5
+This section defines the environment for the pathfinding problem: a directed graph.
+graph: This dictionary represents the graph using an adjacency list.
+Each key in the dictionary is a node (represented by an integer).
+The value associated with each node is a list of tuples (neighbor, distance). Each tuple indicates a directed edge from the key node to the neighbor node with the specified distance (weight). For example, 0: [(1, 1), (2, 5), (3, 8)] means there are edges from node 0 to node 1 with distance 1, to node 2 with distance 5, and to node 3 with distance 8.
+The comment indicates this is a slightly more complex graph than a minimal example, with more connections to provide alternative paths, making it a more interesting test for ACO.
+nodes: A list containing all the node IDs (0 through 5).
+num_nodes: The total number of nodes in the graph.
+start_node and end_node: These specify the source and destination nodes for the pathfinding task we are trying to solve. The goal is to find the shortest path from start_node to end_node.
+3. ACO Hyperparameters:
+
+Python
+
+# --- 2. ACO Hyperparameters ---
+num_ants = 3        # Fewer ants for more randomness
+num_iterations = 100 # Fewer iterations for visible change
+rho = 0.5           # High evaporation for more exploration
+alpha = 0.7         # Lower pheromone influence
+beta = 4.0          # Higher heuristic influence
+Q = 2.0             # Lower pheromone deposit
+These variables are the tuning parameters for the ACO algorithm. Their values significantly impact the algorithm's performance and convergence.
+num_ants: The number of artificial ants that will simultaneously search for paths in each iteration.
+num_iterations: The total number of cycles or generations the ACO algorithm will run. In each iteration, the ants complete their search, and pheromones are updated.
+rho: The pheromone evaporation rate. This is a value between 0 and 1. In each iteration, a portion rho of the pheromone on all edges evaporates. This helps prevent the algorithm from getting stuck in local optima and allows exploration of new paths. A higher rho means faster evaporation.
+alpha: Controls the influence of pheromone ($ \tau $). When calculating the probability of choosing the next edge, the pheromone level on the edge is raised to the power of alpha. A higher alpha makes pheromone trails more influential, leading ants to follow established paths more strongly.
+beta: Controls the influence of heuristic information ($ \eta = 1/\text{distance} $). The heuristic value (inverse distance) is raised to the power of beta. A higher beta makes ants more likely to choose shorter edges, even if they have less pheromone. This guides the ants towards promising short-term moves.
+Q: A pheromone deposition constant. This constant is used in the pheromone update rule. The amount of pheromone deposited by a successful ant on an edge is typically $ Q / \text{length_of_the_path} $. A higher Q means more pheromone is deposited.
+The comments here (# Fewer ants for more randomness, # High evaporation for more exploration, etc.) suggest that these parameters have been intentionally set to values that might make the ACO behavior more visibly exploratory and less likely to converge very quickly or always find the absolute optimal path right away, suitable for demonstrating the algorithm's search process.
+
+4. Initialize Pheromones and Heuristics:
+
+Python
+
+# --- 3. Initialize Pheromones and Heuristics ---
+# Pheromone trails: tau[i][j] represents the pheromone level on the edge from node i to node j.
+# Initialize uniformly with a small amount. A common heuristic is 1 / num_nodes or 1 / (average initial path length).
+initial_pheromone = 1.0 # A common initialization value
+
+# Initialize pheromone matrix (symmetric since graph edges are typically bidirectional in pathfinding ACO)
+pheromone = np.full((num_nodes, num_nodes), initial_pheromone, dtype=float)
+
+# Heuristic information: eta[i][j] = 1 / distance(i, j). Represents the attractiveness of an edge.
+# Use a large value (like infinity or a very large number) for non-existent edges to prevent ants from choosing them.
+heuristic = np.zeros((num_nodes, num_nodes), dtype=float)
+for u in graph:
+    for v, dist in graph[u]:
+        if dist > 0: # Avoid division by zero
+             heuristic[u][v] = 1.0 / dist
+             heuristic[v][u] = 1.0 / dist # Assuming undirected graph heuristic
+        else: # Handle zero distance or potential negative (though unlikely in standard TSP/pathfinding)
+             heuristic[u][v] = float('inf') # Very high desirability for dist 0
+             heuristic[v][u] = float('inf')
+pheromone: A 2D NumPy array initialized to initial_pheromone for all entries. pheromone[i][j] stores the amount of pheromone on the edge from node i to node j. It's a square matrix of size num_nodes x num_nodes. It's initialized uniformly, meaning initially, all edges are equally attractive based solely on pheromone. The comment about symmetric initialization reflects the common practice for undirected graphs where pheromone flow is considered the same in both directions.
+heuristic: A 2D NumPy array initialized to zeros. It will store the heuristic information for each edge.
+The loops iterate through the defined graph structure.
+For each existing edge (u, v) with dist, the heuristic value heuristic[u][v] is set to 1.0 / dist. Shorter distances result in higher heuristic values, making those edges more attractive to ants.
+The line heuristic[v][u] = 1.0 / dist implements the symmetric heuristic for undirected edges.
+The if dist > 0: check prevents division by zero. If dist were 0 (unlikely in a standard pathfinding problem with distinct nodes), setting the heuristic to float('inf') makes that edge extremely attractive.
+Edges that are not defined in the graph (no connection) remain with a heuristic of 0, meaning they will never be chosen probabilistically unless pheromone levels make them somehow attractive (which is unlikely with a heuristic of 0).
+5. Ant Movement Rule (get_next_node):
+
+Python
+
+# --- 4. Ant Movement Rule ---
+def get_next_node(current_node, visited):
+    """
+    Probabilistically selects the next node for an ant from current_node
+    based on pheromone and heuristic information.
+    """
+    possible_moves = []
+    # probabilities = [] # Not needed as a separate list initially
+
+    # Identify potential next nodes (neighbors not yet visited by this ant)
+    for neighbor, dist in graph.get(current_node, []):
+        if neighbor not in visited:
+            possible_moves.append(neighbor)
+
+    # If no valid moves, the ant is stuck and cannot proceed towards the end
+    if not possible_moves:
+        return None
+
+    # Calculate the desirability (pheromone^alpha * heuristic^beta) for each possible move
+    desirabilities = []
+    for next_node in possible_moves:
+        tau = pheromone[current_node][next_node] # Pheromone level on the edge
+        eta = heuristic[current_node][next_node] # Heuristic value (inverse distance)
+        desirability = (tau**alpha) * (eta**beta) # Probability component based on ACO formula
+        desirabilities.append(desirability)
+
+    total_desirability = sum(desirabilities)
+
+    # If total desirability is zero (e.g., all potential edges have 0 pheromone and 0 heuristic),
+    # choose randomly among the possible moves to allow for exploration.
+    if total_desirability == 0:
+         probabilities = [1.0 / len(possible_moves)] * len(possible_moves) # Assign equal probability
+    else:
+        # Calculate normalized probabilities: Probability(choose edge i->j) = Desirability(i->j) / Sum of Desirabilities from i
+        probabilities = [d / total_desirability for d in desirabilities]
+
+    # Select the next node based on the calculated probabilities using random.choices
+    next_node = random.choices(possible_moves, weights=probabilities, k=1)[0]
+
+    return next_node
+This function defines the probabilistic decision process for an ant at current_node.
+visited: A set tracking the nodes the current ant has already visited in its path construction. This prevents the ant from immediately going back or looping unnecessarily.
+It first identifies possible_moves: neighbors of the current_node that are not in the visited set.
+If there are no possible_moves, the ant is stuck, and the function returns None.
+For each possible_move (to next_node), it calculates the desirability of traversing that edge (current_node, next_node). This is the core ACO probabilistic formula: $ (\text{pheromone})^\alpha \times (\text{heuristic})^\beta $.
+The desirabilities are then normalized to get the probabilities of choosing each move, ensuring the sum of probabilities is 1.
+random.choices(possible_moves, weights=probabilities, k=1) selects exactly one node from possible_moves based on the computed probabilities. The [0] extracts the selected node from the list returned by random.choices.
+The selected next_node is returned.
+6. ACO Solution Construction (construct_path):
+
+Python
+
+# --- 5. ACO Solution Construction for Path (Start to End) ---
+def construct_path(start, end):
+    """
+    Simulates a single ant constructing a path from the start node to the end node.
+    Returns the path (list of nodes) and its total distance.
+    If the ant gets stuck, returns None for path and infinity for distance.
+    """
+    current_node = start
+    path = [current_node] # Start the path with the starting node
+    visited = {current_node} # Mark the starting node as visited
+    total_dist = 0 # Initialize path distance
+
+    # Keep moving until the end node is reached
+    while current_node != end:
+        # Get the next node based on the probabilistic rule
+        next_node = get_next_node(current_node, visited)
+
+        # Check if the ant got stuck (no valid next moves found by get_next_node)
+        if next_node is None:
+            return None, float('inf') # Ant failed to reach the end node
+
+        # Find the distance to the selected next node from the graph definition
+        dist_to_next = None
+        for neighbor, dist in graph.get(current_node, []):
+            if neighbor == next_node:
+                dist_to_next = dist
+                break # Found the distance to the selected neighbor
+
+        # Basic check for robustness, although get_next_node should pick a valid neighbor
+        if dist_to_next is None:
+             return None, float('inf') # Should not happen if graph and logic are correct
+
+        # Add the selected next node to the path
+        path.append(next_node)
+        # Mark the next node as visited
+        visited.add(next_node)
+        # Add the distance of the traversed edge to the total distance
+        total_dist += dist_to_next
+        # Move the ant to the next node for the next step
+        current_node = next_node
+
+    # If the loop finishes, the ant has successfully reached the end node
+    return path, total_dist
+This function simulates a single ant's journey from start to end.
+It initializes the path, the visited set (starting with the start node), and the total_dist.
+The while current_node != end: loop continues until the ant reaches the destination.
+Inside the loop, it calls get_next_node to decide the next step.
+If get_next_node returns None, the ant is stuck, and the function returns None for the path and float('inf') for the distance, indicating a failed attempt.
+Otherwise, it finds the distance to the chosen next_node, adds it to the path and visited set, updates total_dist, and moves the current_node to the next_node.
+Once current_node equals end, the loop terminates, and the function returns the successfully constructed path and its total_dist.
+7. Pheromone Update Mechanism (update_pheromones):
+
+Python
+
+# --- 6. Pheromone Update Mechanism ---
+def update_pheromones(all_ant_paths, global_best_path_info):
+    """
+    Updates pheromone trails based on ant paths and evaporation.
+    Applies evaporation globally and deposition based on successful ant paths.
+    Includes an elitist update for the global best path found so far.
+    """
+    global pheromone # We need to modify the global pheromone matrix
+
+    # Pheromone Evaporation: Reduce pheromone levels on all edges
+    # This makes older pheromone trails less influential over time.
+    pheromone *= (1 - rho)
+
+    # Pheromone Deposition by individual ants that completed a path
+    # Ants deposit pheromone on the edges they traversed. Shorter paths (better solutions)
+    # deposit more pheromone.
+    for path, dist in all_ant_paths:
+        # Only deposit pheromone if the ant found a valid path from start to end
+        if path is not None and dist != float('inf'):
+            pheromone_deposit = Q / dist # Amount of pheromone to deposit is inversely proportional to path length
+            # Deposit pheromone along the edges of the ant's path
+            for i in range(len(path) - 1):
+                u, v = path[i], path[i+1]
+                pheromone[u][v] += pheromone_deposit
+                # Assuming an undirected graph for pheromone update (common for pathfinding)
+                # Update pheromone on the reverse edge as well
+                pheromone[v][u] += pheromone_deposit
+
+    # Elitist Pheromone Deposition (on the best path found globally across all iterations)
+    # This is an enhancement to strongly reinforce the best solution discovered so far.
+    global_best_path, global_best_dist = global_best_path_info
+    if global_best_path is not None and global_best_dist != float('inf'):
+        # The elitist ant deposits a larger amount of pheromone
+        elitist_deposit = Q / global_best_dist # Use the global best distance
+        # Deposit elitist pheromone along the edges of the global best path
+        for i in range(len(global_best_path) - 1):
+            u, v = global_best_path[i], global_best_path[i+1]
+            pheromone[u][v] += elitist_deposit
+            pheromone[v][u] += elitist_deposit # Symmetric update
+This function is called after all ants have completed their paths in a single iteration.
+global pheromone: Declares that we are modifying the global pheromone variable.
+Evaporation: pheromone *= (1 - rho) reduces the pheromone level on every edge by a factor of (1 - rho).
+Deposition by Ants: It iterates through all_ant_paths (the results from all ants in this iteration).
+For each ant that found a valid path (path is not None and dist != float('inf')), it calculates the pheromone_deposit as Q / dist. Shorter paths lead to more pheromone deposition.
+It then iterates through the edges (u, v) in the ant's path and adds the pheromone_deposit to pheromone[u][v].
+The line pheromone[v][u] += pheromone_deposit performs a symmetric update, which is standard for undirected graphs where the pheromone trail strengthens the link in both directions.
+Elitist Deposition: This is an optional but common addition to ACO. It takes the global_best_path_info (the best path found across all iterations so far) and deposits an additional amount of pheromone (Q / global_best_dist) specifically on the edges of this best path. This strongly reinforces the best solution found, making it more likely that ants in future iterations will follow this path.
+8. Run ACO (run_aco):
+
+Python
+
+# --- 7. Run ACO ---
+def run_aco(start, end):
+    """
+    Executes the main loop of the Ant Colony Optimization algorithm
+    to find the shortest path from start to end.
+    """
+    global_best_path = None
+    global_best_dist = float('inf') # Initialize global best distance to infinity
+
+    best_dist_history = [] # To track the best distance found at the end of each iteration
+
+    # Main loop for the specified number of iterations (generations)
+    for iteration in range(num_iterations):
+        # List to store paths found by all ants in the current iteration
+        all_ant_paths = []
+
+        # Ant construction phase: Simulate each ant building a path
+        for ant_id in range(num_ants):
+            path, dist = construct_path(start, end) # Get path and distance from one ant
+            all_ant_paths.append((path, dist)) # Store the ant's result
+
+            # Update the best path found so far across all iterations
+            # Consider only valid paths (not None and not infinity distance)
+            if path is not None and dist < global_best_dist:
+                 global_best_dist = dist
+                 global_best_path = path
+
+        # Update pheromone trails after all ants have moved in this iteration
+        # Pass the paths from this iteration and the current global best path info
+        update_pheromones(all_ant_paths, (global_best_path, global_best_dist))
+
+        # Record the global best distance found up to this iteration for convergence plot
+        best_dist_history.append(global_best_dist)
+
+        # Optional: Print progress of the best distance found in the current iteration
+        # This helps monitor the algorithm's progress.
+        # if (iteration + 1) % 10 == 0 or iteration == 1:
+        #     print(f"Iteration {iteration+1}: Global Best Distance = {global_best_dist:.3f}")
+
+    print("\nACO Simulation Finished.")
+    # Return the best path found, its distance, and the history of best distances
+    return global_best_path, global_best_dist, best_dist_history
+This function orchestrates the entire ACO process.
+It initializes global_best_path and global_best_dist to keep track of the best solution found over all iterations.
+best_dist_history: A list to store the value of global_best_dist at the end of each iteration, used for the convergence plot.
+The outer for iteration in range(num_iterations): loop runs the algorithm for the specified number of generations.
+Inside the loop:
+all_ant_paths is created to store the results (path, dist) of each ant in the current iteration.
+The inner for ant_id in range(num_ants): loop simulates each ant: it calls construct_path, appends the result to all_ant_paths, and updates global_best_path and global_best_dist if the ant found a better path than the best found so far.
+After all ants have finished, update_pheromones is called to modify the pheromone trails based on the ants' paths and the current global best path.
+The current global_best_dist is added to best_dist_history.
+After all iterations, the function returns the final global_best_path, global_best_dist, and the best_dist_history.
+9. Dijkstra's Algorithm (dijkstra):
+
+Python
+
+# --- 8. Dijkstra's Algorithm (for comparison) ---
+def dijkstra(graph, start, end):
+    """
+    Finds the shortest path from start to end using Dijkstra's algorithm.
+    Requires a graph represented as an adjacency list {node: [(neighbor, weight)]}.
+    Returns the path (list of nodes) and the total distance.
+    Returns None and float('inf') if the end is unreachable.
+    """
+    # dists: Dictionary to store the shortest distance found from start to each node.
+    # Initialize all distances to infinity except for the start node (distance 0).
+    dists = {node: float('inf') for node in graph}
+    dists[start] = 0
+
+    # previous: Dictionary to store the predecessor node on the shortest path from start.
+    # Used to reconstruct the path.
+    previous = {node: None for node in graph}
+
+    # Priority queue: Stores tuples of (distance, node).
+    # Automatically sorts by distance, allowing us to always process the node
+    # with the smallest known distance first.
+    pq = [(0, start)] # Start with the start node and distance 0 in the priority queue
+
+    # Process nodes until the priority queue is empty
+    while pq:
+        # Get the node with the smallest distance from the priority queue
+        current_dist, current_node = heapq.heappop(pq)
+
+        # If we have reached the end node, reconstruct the path and return
+        if current_node == end:
+            path = []
+            # Traverse back from the end node to the start using the 'previous' dictionary
+            while current_node is not None:
+                path.append(current_node)
+                current_node = previous[current_node]
+            # The path is built backwards, so reverse it before returning
+            return path[::-1], dists[end]
+
+        # If the current distance extracted from the priority queue is greater
+        # than the already recorded shortest distance to this node, skip.
+        # This can happen if we found a shorter path to this node earlier
+        # and a stale entry is still in the priority queue.
+        if current_dist > dists[current_node]:
+            continue
+
+        # Explore the neighbors of the current node
+        # graph.get(current_node, []) safely handles nodes with no outgoing edges
+        for neighbor, weight in graph.get(current_node, []):
+            # Calculate the distance to the neighbor through the current node
+            distance = current_dist + weight
+
+            # If this new path to the neighbor is shorter than the previously known shortest path
+            if distance < dists[neighbor]:
+                # Update the shortest distance to the neighbor
+                dists[neighbor] = distance
+                # Set the current node as the predecessor of the neighbor on the shortest path
+                previous[neighbor] = current_node
+                # Add or update the neighbor in the priority queue with the new shorter distance
+                heapq.heappush(pq, (distance, neighbor))
+
+    # If the loop finishes and the end node was not reached, it means the end is unreachable from the start.
+    return None, float('inf')
+This function implements Dijkstra's algorithm, a classic algorithm that finds the shortest path from a single source node to all other nodes in a graph with non-negative edge weights. Here, it's used to find the shortest path from start to end.
+dists: A dictionary to keep track of the shortest distance found so far from the start node to every other node. Initialized to infinity for all nodes except start (which is 0).
+previous: A dictionary to reconstruct the actual path. previous[node] stores the node that came just before node on the shortest path found so far from start.
+pq: A priority queue (heapq) storing tuples (distance, node). It always allows retrieving the node with the smallest current shortest distance efficiently.
+The while pq: loop continues as long as there are nodes to process.
+heapq.heappop(pq) extracts the node with the smallest distance from the priority queue.
+If the extracted current_node is the end node, the shortest path has been found, and the function reconstructs the path by backtracking from end using the previous dictionary and returns it along with the total distance.
+If a shorter path to a neighbor is found, the dists and previous for that neighbor are updated, and the neighbor is added/updated in the priority queue.
+If the loop finishes without reaching the end node, it means the end is unreachable, and the function returns None and float('inf').
+10. Run Algorithms and Compare:
+
+Python
+
+# --- 9. Run Algorithms and Compare ---
+print(f"Starting ACO simulation for path from node {start_node} to {end_node}...")
+# Run the ACO algorithm
+aco_path, aco_dist, aco_history = run_aco(start_node, end_node)
+
+print(f"\nStarting Dijkstra's algorithm for path from node {start_node} to {end_node}...")
+# Run Dijkstra's algorithm for comparison (ground truth)
+dijkstra_path, dijkstra_dist = dijkstra(graph, start_node, end_node)
+
+print("\n--- Optimization Results Comparison ---")
+print(f"Problem: Find path from node {start_node} to node {end_node}")
+print(f"Graph: {graph}")
+print("-" * 30)
+print(f"ACO Result:")
+print(f"  Path: {aco_path}")
+print(f"  Distance: {aco_dist:.3f}") # Print with 3 decimal places for clarity
+print("-" * 30)
+print(f"Dijkstra Result (Optimal):")
+print(f"  Path: {dijkstra_path}")
+print(f"  Distance: {dijkstra_dist}")
+print("-" * 30)
+
+# Check if ACO found the optimal path (or a path with the optimal distance)
+if aco_dist == dijkstra_dist:
+    print("ACO found a path with the same distance as the optimal path.")
+elif aco_dist < dijkstra_dist:
+     print("Warning: ACO found a path shorter than Dijkstra's? Check graph or implementations.")
+else:
+    # Allow for small floating point inaccuracies in ACO distance calculation if needed
+    if abs(aco_dist - dijkstra_dist) < 1e-9:
+         print("ACO found a path with a distance very close to the optimal path (due to floating point arithmetic).")
+    else:
+        print(f"ACO found a path, but it is longer than the optimal path by {aco_dist - dijkstra_dist:.3f}.")
+        print("This is expected as ACO is a metaheuristic and doesn't guarantee optimality.")
+This section executes the two algorithms on the defined graph and prints their results.
+run_aco(start_node, end_node) is called to run the ACO simulation. The returned best path, its distance, and the history are stored.
+dijkstra(graph, start_node, end_node) is called to find the true shortest path using Dijkstra's algorithm. The returned path and distance are stored.
+The print statements display the results clearly, showing the path found and its total distance for both algorithms.
+A comparison message is printed to indicate whether ACO found the optimal path (or a path with the same minimum distance). It also includes a note that ACO, being a metaheuristic, doesn't guarantee optimality but aims for a good solution.
+11. Plotting:
+
+Python
+
+# --- 10. Plotting Convergence (ACO) ---
+plt.figure(figsize=(10, 5))
+plt.plot(range(len(aco_history)), aco_history)
+plt.xlabel("Iteration")
+plt.ylabel("Best Distance Found (Global Best)")
+plt.title("ACO Convergence for Shortest Path Problem")
+plt.grid(True)
+plt.show()
+
+# --- Optional: Plotting the Graph and Paths ---
+# Update node positions for visualization (spread out for clarity)
+pos = {
+    0: (0, 0),
+    1: (2, 2),
+    2: (4, 0),
+    3: (6, 2),
+    4: (8, 0),
+    5: (10, 1)
+}
+
+plt.figure(figsize=(10, 6))
+
+# Draw nodes
+for node, coords in pos.items():
+    plt.plot(coords[0], coords[1], 'o', markersize=10, color='skyblue', zorder=5) # zorder to be on top
+    plt.text(coords[0], coords[1] + 0.2, str(node), fontsize=12, ha='center')
+
+# Draw all edges in the graph faintly
+for u in graph:
+    for v, dist in graph[u]:
+        x_coords = [pos[u][0], pos[v][0]]
+        y_coords = [pos[u][1], pos[v][1]]
+        plt.plot(x_coords, y_coords, 'gray', linestyle='--', linewidth=0.7, alpha=0.6) # Faint dashed lines
+
+# Draw ACO Path
+if aco_path is not None and aco_dist != float('inf'):
+    aco_x = [pos[node][0] for node in aco_path]
+    aco_y = [pos[node][1] for node in aco_path]
+    plt.plot(aco_x, aco_y, 'b-', linewidth=2.5, label=f'ACO Path (Dist: {aco_dist:.2f})', zorder=2) # Solid blue line
+
+# Draw Dijkstra Path
+if dijkstra_path is not None and dijkstra_dist != float('inf'):
+    dij_x = [pos[node][0] for node in dijkstra_path]
+    dij_y = [pos[node][1] for node in dijkstra_path]
+    plt.plot(dij_x, dij_y, 'r--', linewidth=2.5, label=f'Dijkstra Path (Dist: {dijkstra_dist:.2f})', zorder=3) # Dashed red line
+
+plt.title('ACO vs Dijkstra Path Comparison')
+plt.xlabel('X Coordinate')
+plt.ylabel('Y Coordinate')
+plt.legend()
+plt.grid(False) # Hide grid for graph plot
+plt.axis('equal') # Equal scaling for x and y axes
+plt.axis('off') # Hide axes ticks and labels
+plt.show()
+Convergence Plot:
+plt.figure() creates a new figure.
+plt.plot(range(len(aco_history)), aco_history) plots the best_dist_history list. The x-axis represents the iteration number (from 0 to num_iterations - 1), and the y-axis shows the best distance found globally up to that iteration. This visually demonstrates how the ACO algorithm improves over time, hopefully converging towards a lower distance.
+Labels and title are added for clarity.
+plt.grid(True) adds a grid.
+plt.show() displays the plot.
+Graph and Path Plot (Optional):
+This section provides a visual representation of the graph and the paths found.
+pos: A dictionary mapping each node to arbitrary (x, y) coordinates for plotting purposes. These coordinates don't affect the algorithm's calculation, only the visual layout. The coordinates are updated from the previous version to spread out the nodes for better visualization of the new graph structure.
+It draws each node as a circle and labels it.
+It draws all possible edges in the graph as faint gray dashed lines.
+It then draws the path found by ACO as a thicker solid blue line and the path found by Dijkstra as a thicker dashed red line. Labels and legends distinguish the paths.
+zorder is used to control the drawing order, ensuring nodes and paths are visible over the background edges.
+plt.axis('equal') ensures distances are represented accurately on the plot.
+plt.axis('off') hides the standard axes labels and ticks.
+plt.show() displays the graph plot.

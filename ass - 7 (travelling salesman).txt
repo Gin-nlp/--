@@ -1,0 +1,404 @@
+# Program:
+import numpy as np
+import random
+import matplotlib.pyplot as plt
+
+# Distance matrix: 10 random cities
+np.random.seed(42)
+cities = np.random.rand(10, 2)
+
+def total_distance(route):
+    """Calculates the total distance of a given route."""
+    # Calculate distance between consecutive cities in the route, including returning to the start
+    return sum(np.linalg.norm(cities[route[i]] - cities[route[i-1]]) for i in range(len(route)))
+
+# Initialize population
+def initial_population(size, n_cities):
+    """Generates an initial population of random routes."""
+    # Each route is a permutation of city indices
+    return [random.sample(range(n_cities), n_cities) for _ in range(size)]
+
+# Fitness: Inverse of distance
+def fitness(route):
+    """Calculates the fitness of a route as the inverse of its total distance."""
+    dist = total_distance(route)
+    # Avoid division by zero in case of a zero distance (unlikely in TSP with distinct cities)
+    if dist == 0:
+        return float('inf') # Or a large number
+    return 1 / dist
+
+# Selection: Tournament
+def select(pop, k=3):
+    """Selects an individual from the population using tournament selection."""
+    # Randomly select k individuals from the population
+    selected = random.sample(pop, k)
+    # Return the individual with the highest fitness (lowest distance)
+    return max(selected, key=fitness)
+
+# Ordered Crossover (OX)
+def crossover(parent1, parent2):
+    """Performs ordered crossover (OX) on two parent routes."""
+    size = len(parent1)
+    # Select a random start and end point for the crossover segment
+    start, end = sorted(random.sample(range(size), 2))
+
+    # Copy the segment from parent1
+    middle = parent1[start:end]
+
+    # Fill the rest of the child route with cities from parent2 in their original order,
+    # skipping cities already in the middle segment
+    rest = [city for city in parent2 if city not in middle]
+
+    # Combine the 'rest' parts and the 'middle' segment to form the child
+    child = rest[:start] + middle + rest[start:]
+    return child
+
+# Mutation: swap
+def mutate(route, rate=0.01):
+    """Performs swap mutation on a route with a given probability rate."""
+    mutated_route = list(route) # Create a mutable copy
+    for i in range(len(mutated_route)):
+        # For each city, potentially swap it with another city
+        if random.random() < rate:
+            j = random.randint(0, len(mutated_route) - 1)
+            # Swap the cities at indices i and j
+            mutated_route[i], mutated_route[j] = mutated_route[j], mutated_route[i]
+    return mutated_route
+
+# Genetic Algorithm
+def genetic_algorithm(n_generations=500, pop_size=100):
+    """Runs the genetic algorithm to find the shortest route."""
+    n_cities = len(cities)
+    # Initialize the population
+    population = initial_population(pop_size, n_cities)
+
+    # Find the best route and its distance in the initial population
+    # min is used with key=total_distance because we want the minimum distance (highest fitness)
+    best_route = min(population, key=total_distance)
+    best_dist = total_distance(best_route)
+
+    # Keep track of the best distance over generations
+    history = [best_dist]
+
+    # Main genetic algorithm loop
+    for _ in range(n_generations):
+        new_population = []
+        # Generate new individuals until the new population reaches the desired size
+        for _ in range(pop_size):
+            # Select two parents using tournament selection
+            p1 = select(population)
+            p2 = select(population)
+            # Perform crossover to create a child
+            child = crossover(p1, p2)
+            # Perform mutation on the child
+            child = mutate(child)
+            # Add the new child to the next generation
+            new_population.append(child)
+
+        # Replace the current population with the new population
+        population = new_population
+
+        # Find the current best route and its distance in the new population
+        current_best = min(population, key=total_distance)
+        dist = total_distance(current_best)
+
+        # Update the overall best route and distance if the current best is better
+        if dist < best_dist:
+            best_route = current_best
+            best_dist = dist
+
+        # Record the best distance for this generation
+        history.append(best_dist)
+
+    # Return the best route found, its distance, and the history of best distances
+    return best_route, best_dist, history
+
+# Run GA
+best_route, best_distance, history = genetic_algorithm()
+
+# Plot result
+plt.figure(figsize=(10, 5))
+
+# Plot the convergence (distance over generations)
+plt.subplot(1, 2, 1)
+plt.plot(history)
+plt.title("Convergence over Generations")
+plt.xlabel("Generation")
+plt.ylabel("Distance")
+
+# Plot the shortest route found
+plt.subplot(1, 2, 2)
+# Prepare cities for plotting in the order of the best route, closing the loop
+ordered_cities = np.array([cities[i] for i in best_route + [best_route[0]]])
+plt.plot(ordered_cities[:, 0], ordered_cities[:, 1], marker='o') # Plot cities as points and lines
+plt.title("Shortest Route")
+
+plt.tight_layout() # Adjust layout to prevent overlap
+plt.show() # Display the plots
+
+# Print the best route and its distance
+print("Best Route:", best_route)
+print("Shortest Distance:", round(best_distance, 3))
+
+
+
+
+--------------------------------------------------------------------------------------------------------------
+
+import numpy as np: Imports the NumPy library, which is essential for numerical operations, especially array manipulation and mathematical functions like linalg.norm (used for calculating Euclidean distance). We alias it as np for convenience.
+import random: Imports Python's built-in random module, used for generating random numbers, making random selections (like for city positions, initial routes, tournament selection, and mutation).
+import matplotlib.pyplot as plt: Imports the pyplot module from the Matplotlib library, used for creating visualizations, specifically plotting the convergence of the algorithm and the final best route found. It's aliased as plt.
+2. Problem Setup: Cities
+
+Python
+
+# Distance matrix: 10 random cities
+np.random.seed(42)
+cities = np.random.rand(10, 2)
+# Distance matrix: 10 random cities: This comment indicates that the code is setting up the problem instance – defining the locations of the cities. In the TSP, the "distance matrix" contains the distances between every pair of cities. Here, the cities' locations in a 2D plane are defined, and distances will be calculated from these coordinates.
+np.random.seed(42): This sets the "seed" for NumPy's random number generator. Using a seed means that the sequence of random numbers generated will be the same every time you run the code. This is useful for reproducibility – if you run the code multiple times with the same seed, you will get the same set of initial cities and potentially the same sequence of random operations in the algorithm, leading to the same result.
+cities = np.random.rand(10, 2): This line creates a NumPy array named cities. It contains 10 rows and 2 columns. np.random.rand(10, 2) generates 10 pairs of random numbers between 0 and 1. Each row [x, y] represents the coordinates of a city in a 2D space. So, cities is a 10x2 array representing the (x, y) coordinates of 10 cities.
+3. Calculating Route Distance
+
+Python
+
+def total_distance(route):
+    """Calculates the total distance of a given route."""
+    # Calculate distance between consecutive cities in the route, including returning to the start
+    return sum(np.linalg.norm(cities[route[i]] - cities[route[i-1]]) for i in range(len(route)))
+def total_distance(route):: Defines a function named total_distance that takes one argument: route. A route is represented as a list or array of city indices, indicating the order in which the cities are visited (e.g., [0, 3, 1, 2, ...] means visit city 0, then city 3, then city 1, etc.).
+"""Calculates the total distance of a given route.""": This is a docstring explaining what the function does.
+return sum(...): This calculates the sum of distances between consecutive cities in the route.
+np.linalg.norm(cities[route[i]] - cities[route[i-1]]): This is the core calculation.
+cities[route[i]]: Gets the (x, y) coordinates of the city at the current position i in the route.
+cities[route[i-1]]: Gets the (x, y) coordinates of the city at the previous position i-1 in the route.
+cities[route[i]] - cities[route[i-1]]: Calculates the vector difference between the two city coordinates.
+np.linalg.norm(...): Calculates the Euclidean norm (which is the straight-line distance) of the vector difference. This gives the distance between the city at route[i] and the city at route[i-1].
+for i in range(len(route)): This loop iterates through the indices of the route.
+For i = 1 to len(route) - 1, it calculates the distance between route[i] and route[i-1].
+Crucially, when i = 0, route[i-1] effectively wraps around to route[-1], which is the last city in the list. This calculates the distance from the last city back to the first city (route[0]), thus closing the loop as required in the standard TSP.
+4. Initializing the Population
+
+Python
+
+# Initialize population
+def initial_population(size, n_cities):
+    """Generates an initial population of random routes."""
+    # Each route is a permutation of city indices
+    return [random.sample(range(n_cities), n_cities) for _ in range(size)]
+def initial_population(size, n_cities):: Defines a function to create the first generation of routes. It takes size (the number of routes in the population) and n_cities (the total number of cities) as arguments.
+return [...]: This is a list comprehension that generates a list of routes.
+random.sample(range(n_cities), n_cities): This is the key part of generating a single random route.
+range(n_cities): Creates a sequence of numbers from 0 up to n_cities - 1 (representing the city indices).
+random.sample(..., n_cities): Selects n_cities unique elements from the range(n_cities) sequence without replacement. This effectively creates a random permutation of the city indices, which is exactly what a valid TSP route is (visiting each city exactly once).
+for _ in range(size): This repeats the random.sample process size times, creating size different random routes to form the initial population.
+5. Calculating Fitness
+
+Python
+
+# Fitness: Inverse of distance
+def fitness(route):
+    """Calculates the fitness of a route as the inverse of its total distance."""
+    dist = total_distance(route)
+    # Avoid division by zero in case of a zero distance (unlikely in TSP with distinct cities)
+    if dist == 0:
+        return float('inf') # Or a large number
+    return 1 / dist
+def fitness(route):: Defines a function to calculate the "fitness" of a route. In genetic algorithms, higher fitness is generally better.
+dist = total_distance(route): Calculates the total distance of the given route using the function defined earlier.
+return 1 / dist: The fitness is defined as the inverse of the total distance. In TSP, we want to minimize the distance. By taking the inverse, a shorter distance results in a higher fitness score, which aligns with the goal of the genetic algorithm (maximizing fitness).
+if dist == 0: return float('inf'): This handles the edge case where the distance might be zero (highly improbable with randomly placed distinct cities, but good practice). A zero distance would cause division by zero. Returning float('inf') gives an infinitely high fitness score, indicating an extremely good (impossible in this case) route.
+6. Selection: Tournament
+
+Python
+
+# Selection: Tournament
+def select(pop, k=3):
+    """Selects an individual from the population using tournament selection."""
+    # Randomly select k individuals from the population
+    selected = random.sample(pop, k)
+    # Return the individual with the highest fitness (lowest distance)
+    return max(selected, key=fitness)
+def select(pop, k=3):: Defines a function select that implements tournament selection. It takes the current population (a list of routes) and an optional tournament size k (defaulting to 3) as arguments.
+selected = random.sample(pop, k): Randomly selects k unique routes from the population to participate in the tournament.
+return max(selected, key=fitness): From the k selected routes, it returns the one with the highest fitness (which corresponds to the lowest total distance), as determined by calling the fitness function on each of the k routes. Tournament selection is a common method because it's simple and doesn't require the entire population to be sorted by fitness.
+7. Crossover: Ordered Crossover (OX)
+
+Python
+
+# Ordered Crossover (OX)
+def crossover(parent1, parent2):
+    """Performs ordered crossover (OX) on two parent routes."""
+    size = len(parent1)
+    # Select a random start and end point for the crossover segment
+    start, end = sorted(random.sample(range(size), 2))
+
+    # Copy the segment from parent1
+    middle = parent1[start:end]
+
+    # Fill the rest of the child route with cities from parent2 in their original order,
+    # skipping cities already in the middle segment
+    rest = [city for city in parent2 if city not in middle]
+
+    # Combine the 'rest' parts and the 'middle' segment to form the child
+    child = rest[:start] + middle + rest[start:]
+    return child
+def crossover(parent1, parent2):: Defines the crossover function, which takes two parent routes (parent1 and parent2) and combines their genetic material to create a child route. Ordered Crossover (OX) is a common crossover operator for permutation-based problems like TSP.
+size = len(parent1): Gets the number of cities (length of the route).
+start, end = sorted(random.sample(range(size), 2)): Selects two distinct random indices between 0 and size - 1 to define a segment. sorted() ensures start is always less than or equal to end.
+middle = parent1[start:end]: Copies the segment of cities from parent1 between the start and end indices (exclusive of end). This segment will be placed directly into the child.
+rest = [city for city in parent2 if city not in middle]: This is a list comprehension. It iterates through the cities in parent2. For each city in parent2, it checks if that city is not already present in the middle segment copied from parent1. If it's not in middle, the city is added to the rest list. This preserves the relative order of cities from parent2 that are not in the middle segment.
+child = rest[:start] + middle + rest[start:]: Constructs the child route:
+rest[:start]: Takes the part of the rest list up to the start index.
+middle: Inserts the segment copied from parent1.
+rest[start:]: Takes the rest of the rest list from the start index onwards.
+By combining these, the child gets the middle segment directly from parent1, and the remaining cities are filled in from parent2 in their original relative order, ensuring the child is a valid permutation of cities and doesn't miss or duplicate any cities.
+8. Mutation: Swap Mutation
+
+Python
+
+# Mutation: swap
+def mutate(route, rate=0.01):
+    """Performs swap mutation on a route with a given probability rate."""
+    mutated_route = list(route) # Create a mutable copy
+    for i in range(len(mutated_route)):
+        # For each city, potentially swap it with another city
+        if random.random() < rate:
+            j = random.randint(0, len(mutated_route) - 1)
+            # Swap the cities at indices i and j
+            mutated_route[i], mutated_route[j] = mutated_route[j], mutated_route[i]
+    return mutated_route
+def mutate(route, rate=0.01):: Defines the mutate function, which introduces small random changes to a route. It takes a route and a rate (mutation probability, defaulting to 0.01 or 1%) as arguments.
+mutated_route = list(route): Creates a mutable copy of the input route because lists are mutable, while tuples (which random.sample could potentially return, though not here) are not, and modifying in place is common for mutation.
+for i in range(len(mutated_route)): Iterates through each position (i) in the mutated_route.
+if random.random() < rate:: For each position, there's a rate probability that a mutation will occur at this position. random.random() generates a float between 0.0 and 1.0.
+j = random.randint(0, len(mutated_route) - 1): If the mutation occurs at position i, a random second position j (which could be the same as i) is chosen within the route.
+mutated_route[i], mutated_route[j] = mutated_route[j], mutated_route[i]: Swaps the cities at positions i and j. This is a simple swap mutation.
+return mutated_route: Returns the potentially mutated route.
+9. Genetic Algorithm Main Loop
+
+Python
+
+# Genetic Algorithm
+def genetic_algorithm(n_generations=500, pop_size=100):
+    """Runs the genetic algorithm to find the shortest route."""
+    n_cities = len(cities)
+    # Initialize the population
+    population = initial_population(pop_size, n_cities)
+
+    # Find the best route and its distance in the initial population
+    # min is used with key=total_distance because we want the minimum distance (highest fitness)
+    best_route = min(population, key=total_distance)
+    best_dist = total_distance(best_route)
+
+    # Keep track of the best distance over generations
+    history = [best_dist]
+
+    # Main genetic algorithm loop
+    for _ in range(n_generations):
+        new_population = []
+        # Generate new individuals until the new population reaches the desired size
+        for _ in range(pop_size):
+            # Select two parents using tournament selection
+            p1 = select(population)
+            p2 = select(population)
+            # Perform crossover to create a child
+            child = crossover(p1, p2)
+            # Perform mutation on the child
+            child = mutate(child)
+            # Add the new child to the next generation
+            new_population.append(child)
+
+        # Replace the current population with the new population
+        population = new_population
+
+        # Find the current best route and its distance in the new population
+        current_best = min(population, key=total_distance)
+        dist = total_distance(current_best)
+
+        # Update the overall best route and distance if the current best is better
+        if dist < best_dist:
+            best_route = current_best
+            best_dist = dist
+
+        # Record the best distance for this generation
+        history.append(best_dist)
+
+    # Return the best route found, its distance, and the history of best distances
+    return best_route, best_dist, history
+def genetic_algorithm(n_generations=500, pop_size=100):: Defines the main function that orchestrates the genetic algorithm. It takes the number of generations (n_generations, default 500) and the population size (pop_size, default 100) as arguments.
+n_cities = len(cities): Gets the number of cities from the global cities array.
+population = initial_population(pop_size, n_cities): Creates the starting population using the initial_population function.
+best_route = min(population, key=total_distance): Finds the route with the minimum total_distance in the initial population. This is the best route found so far.
+best_dist = total_distance(best_route): Calculates the distance of the initial best route.
+history = [best_dist]: Initializes a list to store the best distance found in each generation. This is useful for plotting the algorithm's progress.
+for _ in range(n_generations):: This is the main loop that runs for the specified number of generations.
+new_population = []: An empty list is created to build the next generation.
+for _ in range(pop_size):: This inner loop runs pop_size times to create pop_size new individuals for the next generation.
+p1 = select(population) and p2 = select(population): Selects two parent routes from the current population using the select (tournament selection) function.
+child = crossover(p1, p2): Creates a child route by performing crossover on the two selected parents.
+child = mutate(child): Applies mutation to the newly created child route.
+new_population.append(child): Adds the mutated child to the new_population list.
+population = new_population: After the inner loop finishes, the new_population replaces the old population. This is how the algorithm evolves over generations.
+current_best = min(population, key=total_distance): Finds the route with the minimum distance in the newly generated population.
+dist = total_distance(current_best): Gets the distance of the current best route.
+if dist < best_dist:: Checks if the current best route is better (shorter distance) than the overall best route found so far.
+best_route = current_best and best_dist = dist: If the current best is better, update the overall best_route and best_dist.
+history.append(best_dist): Appends the overall best distance found up to and including this generation to the history list. Note that even if the current best is not a new overall best, the best distance from previous generations is still recorded here, showing the plateau if no improvement is made.
+return best_route, best_dist, history: After all generations are run, the function returns the best route found, its distance, and the historical list of best distances.
+10. Running the Algorithm
+
+Python
+
+# Run GA
+best_route, best_distance, history = genetic_algorithm()
+best_route, best_distance, history = genetic_algorithm(): This line calls the genetic_algorithm function with its default parameters (500 generations, population size 100) and unpacks the returned values into the three variables. This is where the computation happens.
+11. Plotting Results
+
+Python
+
+# Plot result
+plt.figure(figsize=(10, 5))
+
+# Plot the convergence (distance over generations)
+plt.subplot(1, 2, 1)
+plt.plot(history)
+plt.title("Convergence over Generations")
+plt.xlabel("Generation")
+plt.ylabel("Distance")
+
+# Plot the shortest route found
+plt.subplot(1, 2, 2)
+# Prepare cities for plotting in the order of the best route, closing the loop
+ordered_cities = np.array([cities[i] for i in best_route + [best_route[0]]])
+plt.plot(ordered_cities[:, 0], ordered_cities[:, 1], marker='o') # Plot cities as points and lines
+plt.title("Shortest Route")
+
+plt.tight_layout() # Adjust layout to prevent overlap
+plt.show() # Display the plots
+plt.figure(figsize=(10, 5)): Creates a new Matplotlib figure with a specified size (10 inches wide, 5 inches tall).
+plt.subplot(1, 2, 1): Creates a subplot grid of 1 row and 2 columns, and selects the first subplot (index 1). This will be used for the convergence plot.
+plt.plot(history): Plots the history list. The x-axis will represent the generation number (implicitly from 0 up to n_generations), and the y-axis will show the best distance found up to that generation. This plot shows how the algorithm improved over time.
+plt.title(...), plt.xlabel(...), plt.ylabel(...): Sets the title and axis labels for the convergence plot.
+plt.subplot(1, 2, 2): Selects the second subplot (index 2) in the 1x2 grid. This will be used for plotting the best route.
+ordered_cities = np.array([cities[i] for i in best_route + [best_route[0]]]): Prepares the city coordinates for plotting the route.
+best_route + [best_route[0]]: Creates a new list by appending the first city's index (best_route[0]) to the end of the best_route. This is done to draw a line segment connecting the last city in the route back to the starting city, visually closing the loop.
+[cities[i] for i in ...] : Uses a list comprehension to get the (x, y) coordinates for each city index in the extended route list.
+np.array(...): Converts the list of coordinates into a NumPy array, making it easier to slice.
+plt.plot(ordered_cities[:, 0], ordered_cities[:, 1], marker='o'): Plots the route.
+ordered_cities[:, 0]: Gets all the x-coordinates from the ordered_cities array.
+ordered_cities[:, 1]: Gets all the y-coordinates.
+plt.plot(x_coords, y_coords) draws lines connecting the points in the order they appear.
+marker='o' places a circle marker at each city location.
+plt.title("Shortest Route"): Sets the title for the route plot.
+plt.tight_layout(): Automatically adjusts subplot parameters to give a tight layout, preventing titles/labels from overlapping.
+plt.show(): Displays the generated plots.
+12. Printing Final Results
+
+Python
+
+# Print the best route and its distance
+print("Best Route:", best_route)
+print("Shortest Distance:", round(best_distance, 3))
+print("Best Route:", best_route): Prints the list of city indices representing the best route found by the algorithm.
+print("Shortest Distance:", round(best_distance, 3)): Prints the total distance of the best route found, rounded to 3 decimal places.
